@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Console — Organizations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" type="text/css" href="../assets/css/common.css" />
+    <script src="https://code.jquery.com/jquery-3.3.1.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --ground:#ececec; --panel:#ffffff; --panel2:#f4f4f4; --line:#e2e2e2;
+    --line2:#cfcfcf; --ink:#1d1d1b; --muted:#63656a; --muted2:#8c8e93;
+    --signal:#e2000f;
+    --steel:#5b5d63; --steel2:#8d8f95; --steel3:#54565b; --steel4:#b4b6bb;
+    --amber:#b8860b; --good:#2e9e5b; --warn:#a01018;
+    --sans:'Helvetica Neue',Arial,'Inter',system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;
+    line-height:1.5;-webkit-font-smoothing:antialiased;font-feature-settings:"tnum"}
+
+  /* ---------- page loader ---------- */
+  .page-loader{position:fixed;inset:0;background:var(--ground);z-index:500;display:flex;
+    flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    transition:opacity .25s ease,visibility .25s ease}
+  .page-loader.hide{opacity:0;visibility:hidden;pointer-events:none}
+  .pl-brand{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+  .pl-brand .tick{width:9px;height:18px;background:var(--signal);flex:none}
+  .pl-brand span{font-size:14px;font-weight:700;color:var(--ink)}
+  .pl-text{font-size:11px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+
+  .spinner{width:28px;height:28px;border-radius:50%;border:3px solid var(--line2);
+    border-top-color:var(--signal);animation:spin .7s linear infinite;flex:none}
+  .spinner.sm{width:12px;height:12px;border-width:2px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .shell{display:flex;min-height:100vh}
+
+  /* ---------- sidebar ---------- */
+  .sidebar{width:224px;flex:none;background:#fff;border-right:1px solid var(--line);
+    display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+  .side-brand{display:flex;align-items:center;gap:11px;padding:20px 20px 18px;border-bottom:1px solid var(--line)}
+  .tick{width:10px;height:20px;background:var(--signal);flex:none}
+  .side-brand h1{font-size:15px;font-weight:700;letter-spacing:0}
+  .side-brand .sub{font-size:9.5px;color:var(--muted2);text-transform:uppercase;letter-spacing:.14em;margin-top:1px}
+
+  .side-nav{padding:14px 10px;flex:1}
+  .nav-label{font-size:9.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--muted2);padding:8px 12px 8px}
+  .nav-item{display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:none;border:none;
+    font-family:var(--sans);font-size:13px;color:var(--muted);padding:10px 12px;border-radius:2px;cursor:pointer;
+    border-left:3px solid transparent;transition:.13s;margin-bottom:2px}
+  .nav-item:hover{background:var(--panel2);color:var(--ink)}
+  .nav-item.active{background:#fdf0f1;color:var(--signal);border-left-color:var(--signal);font-weight:600}
+  .nav-item svg{flex:none;width:16px;height:16px;stroke:currentColor}
+  .nav-item .nc{margin-left:auto;font-size:10px;font-weight:700;color:#fff;background:var(--steel3);
+    border-radius:8px;padding:1px 6px;min-width:14px;text-align:center;display:inline-flex;align-items:center;justify-content:center}
+  .nav-item.active .nc{background:var(--signal)}
+
+  .nav-loading{display:none;align-items:center;gap:8px;padding:1px 12px 9px 41px;
+    font-size:10.5px;color:var(--muted2)}
+  .nav-loading.show{display:flex}
+
+  .side-foot{padding:14px 16px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  .avatar-me{width:30px;height:30px;border-radius:50%;background:var(--steel3);color:#fff;flex:none;
+    display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+  .side-foot .who{flex:1;overflow:hidden}
+  .side-foot .w-name{font-size:12.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .side-foot .w-role{font-size:10.5px;color:var(--muted2)}
+  .side-foot .signout{background:none;border:none;color:var(--muted2);cursor:pointer;font-size:14px;padding:4px}
+  .side-foot .signout:hover{color:var(--signal)}
+
+  /* ---------- main column ---------- */
+  .main{flex:1;min-width:0;display:flex;flex-direction:column}
+  .topbar{position:sticky;top:0;z-index:56;background:#fff;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:16px;padding:18px 28px}
+  .topbar h2{font-size:17px;font-weight:700;letter-spacing:-.01em}
+  .topbar .tb-sub{font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:.1em;margin-top:2px}
+  .topbar .spacer{flex:1}
+  .tb-actions{display:flex;align-items:center;gap:10px}
+  .tb-actions.hidden{display:none}
+
+  .searchbox{position:relative}
+  .searchbox input{font-family:var(--sans);font-size:13px;color:var(--ink);background:#fff;
+    border:1px solid var(--line2);border-radius:2px;padding:9px 12px 9px 30px;min-width:220px}
+  .searchbox input:focus{outline:none;border-color:var(--signal)}
+  .searchbox::before{content:"⌕";position:absolute;left:11px;top:50%;transform:translateY(-50%);
+    color:var(--muted2);font-size:13px}
+  .btn{font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--ink);background:#fff;border:1px solid var(--line2);padding:9px 16px;border-radius:2px;
+    cursor:pointer;transition:.15s;font-family:var(--sans);white-space:nowrap}
+  .btn:hover{border-color:var(--signal);color:var(--signal)}
+  .btn-red{color:#fff;background:var(--signal);border-color:var(--signal)}
+  .btn-red:hover{background:#c4000d;border-color:#c4000d;color:#fff}
+  .btn-sm{padding:6px 11px;font-size:10.5px}
+
+  .pagebody{padding:24px 28px 40px}
+  .view{display:none}
+  .view.show{display:block}
+
+  .eyebrow{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--ink);margin:0 0 16px;display:flex;align-items:center;gap:10px}
+  .eyebrow::before{content:"";width:14px;height:3px;background:var(--signal);flex:none}
+  .eyebrow::after{content:"";flex:1;height:1px;background:var(--line)}
+  .eyebrow .eb-action{font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:none;
+    color:var(--muted);text-decoration:underline;text-underline-offset:2px;cursor:pointer;white-space:nowrap;
+    background:none;border:none;font-family:var(--sans)}
+  .eyebrow .eb-action:hover{color:var(--signal)}
+  .section-gap{margin-top:34px}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
+    border:1px solid var(--line);border-radius:2px;overflow:hidden;margin-bottom:8px}
+  .kpi{background:var(--panel);padding:16px 16px 14px;position:relative}
+  .kpi .k-label{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted2);margin-bottom:9px;line-height:1.35;min-height:24px}
+  .kpi .k-val{font-size:26px;font-weight:700;line-height:1;letter-spacing:-.01em}
+  .kpi.lead .k-val{color:var(--signal)}
+  .kpi.lead::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--signal)}
+  .kpi .k-note{font-size:9px;color:var(--muted2);margin-top:7px}
+
+  .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:18px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:2px;padding:18px 20px 20px;position:relative}
+  .panel h3{font-size:13.5px;font-weight:700}
+  .panel .ph-sub{font-size:10px;color:var(--muted2);letter-spacing:.04em;margin:2px 0 16px;text-transform:uppercase}
+  .span4{grid-column:span 4}.span8{grid-column:span 8}.span12{grid-column:span 12}
+  .cwrap{height:240px;position:relative}
+
+  /* ---------- shared multi-select filter component ---------- */
+  .filters{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  .ms{position:relative}
+  .ms label{display:block;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--muted2);margin-bottom:6px}
+  .ms-btn{font-size:13px;color:var(--ink);background:#fff;border:1px solid var(--line2);
+    border-radius:2px;padding:8px 12px;min-width:150px;cursor:pointer;
+    display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .ms-btn:hover{border-color:var(--signal)}
+  .ms-btn .cnt{font-weight:600;font-size:10px;color:#fff;background:var(--signal);
+    border-radius:8px;padding:1px 6px;display:none}
+  .ms-btn.active{border-color:var(--signal)}
+  .ms-btn.active .cnt{display:inline}
+  .ms-btn .car{color:var(--muted2);font-size:10px}
+  .ms-pop{position:absolute;top:100%;left:0;margin-top:4px;background:#fff;
+    border:1px solid var(--line2);border-radius:2px;padding:6px;min-width:190px;max-height:280px;
+    overflow-y:auto;z-index:170;display:none;box-shadow:0 12px 30px rgba(0,0,0,.14)}
+  .ms-pop.open{display:block}
+  .ms-opt{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:3px;cursor:pointer;font-size:13px}
+  .ms-opt:hover{background:var(--panel)}
+  .ms-opt input{accent-color:var(--signal);width:14px;height:14px}
+  .reset{font-size:11px;color:var(--muted);background:none;border:none;
+    cursor:pointer;padding:9px 4px;text-decoration:underline;text-underline-offset:3px}
+  .reset:hover{color:var(--signal)}
+
+  table.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+  .tbl th{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted2);text-align:left;padding:8px 10px;border-bottom:2px solid var(--line2);font-weight:600}
+  .tbl th.sortable{cursor:pointer;user-select:none}.tbl th.sortable:hover{color:var(--ink)}
+  .tbl th .arr{opacity:.5;font-size:9px}
+  .tbl th.num,.tbl td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .tbl td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+  .tbl tbody tr:hover{background:var(--panel2)}
+  .tblscroll{max-height:600px;overflow:auto}
+  .tblscroll thead th{position:sticky;top:0;background:#fff;z-index:2}
+
+  .orgc,.userc{display:flex;align-items:center;gap:10px}
+  .avatar,.org-avatar{width:32px;height:32px;flex:none;color:#fff;font-size:11px;font-weight:700;
+    display:flex;align-items:center;justify-content:center}
+  .avatar{border-radius:50%}
+  .org-avatar{border-radius:6px}
+  .u-name,.o-name{font-weight:600;color:var(--ink)}
+  .u-email,.o-domain{font-size:11.5px;color:var(--muted2)}
+
+  .pill{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;display:inline-flex;align-items:center;gap:5px}
+  .pill.role-admin{background:rgba(226,0,15,.1);color:var(--signal)}
+  .pill.role-manager{background:rgba(184,134,11,.14);color:#8a660a}
+  .pill.role-member{background:var(--panel2);color:var(--muted);border:1px solid var(--line2)}
+  .pill.role-viewer{background:#eef0f4;color:var(--steel)}
+  .pill.plan-free{background:var(--panel2);color:var(--muted);border:1px solid var(--line2)}
+  .pill.plan-pro{background:rgba(184,134,11,.14);color:#8a660a}
+  .pill.plan-enterprise{background:rgba(226,0,15,.1);color:var(--signal)}
+  .dot{width:7px;height:7px;border-radius:50%;flex:none}
+  .dot.g{background:var(--good)}.dot.a{background:var(--amber)}.dot.r{background:var(--warn)}
+  .stpill{font-size:10.5px;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+
+  .rowbtn{font-size:10px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;
+    color:var(--muted);background:#fff;border:1px solid var(--line2);border-radius:2px;
+    padding:4px 8px;cursor:pointer;transition:.12s;white-space:nowrap}
+  .rowbtn:hover{border-color:var(--signal);color:var(--signal)}
+  .rowbtn.danger:hover{border-color:var(--warn);color:var(--warn)}
+  .rowbtn.primary{border-color:var(--signal);color:var(--signal)}
+  .rowbtn.primary:hover{background:var(--signal);color:#fff}
+  .rowactions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:nowrap}
+
+  .empty-row td{padding:26px;text-align:center;color:var(--muted2)}
+
+  /* ---------- modals (add/edit org, add/edit user) ---------- */
+  .modal-ov{position:fixed;inset:0;background:rgba(20,25,32,.55);z-index:220;display:none;
+    padding:5vh 3vw;backdrop-filter:blur(2px);align-items:flex-start;justify-content:center}
+  .modal-ov.show{display:flex}
+  .modal-card{background:#fff;border-radius:4px;width:100%;max-width:460px;
+    box-shadow:0 24px 60px rgba(0,0,0,.4)}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;gap:16px;
+    padding:18px 22px;border-bottom:1px solid var(--line)}
+  .modal-head h4{font-size:15px;font-weight:700}
+  .modal-x{cursor:pointer;color:var(--muted);font-size:16px;background:none;border:none}
+  .modal-x:hover{color:var(--signal)}
+  .modal-body{padding:20px 22px 6px}
+  .modal-foot{display:flex;gap:10px;padding:16px 22px 22px}
+  .field{margin-bottom:16px}
+  .field label{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--muted2);margin-bottom:7px}
+  .field input,.field select{width:100%;font-family:var(--sans);font-size:13.5px;color:var(--ink);
+    background:#fff;border:1px solid var(--line2);border-radius:2px;padding:10px 12px}
+  .field input:focus,.field select:focus{outline:none;border-color:var(--signal)}
+  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .field-note{font-size:11px;color:var(--muted2);margin-top:-8px;margin-bottom:16px}
+
+  /* ---------- inline organization-users panel ---------- */
+  .org-users-panel{display:none}
+  .org-users-panel.show{display:block}
+  .breadcrumb{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin-bottom:18px}
+  .breadcrumb button{background:none;border:none;color:var(--signal);font-size:12.5px;font-weight:600;
+    cursor:pointer;padding:0;font-family:var(--sans);text-decoration:underline;text-underline-offset:2px}
+  .breadcrumb button:hover{color:#c4000d}
+  .breadcrumb .bc-sep{color:var(--muted2)}
+  .oup-head{display:flex;align-items:center;gap:14px;margin-bottom:20px;flex-wrap:wrap}
+  .oup-org{width:42px;height:42px;border-radius:6px;background:var(--signal);color:#fff;display:flex;
+    align-items:center;justify-content:center;font-weight:700;font-size:15px;flex:none}
+  .oup-head h3{font-size:18px;font-weight:700}
+  .oup-head .oup-sub{font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
+  .oup-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto}
+
+  /* ---------- confirm dialog ---------- */
+  .confirm-card{max-width:400px}
+  .confirm-body{padding:22px 22px 6px}
+  .confirm-icon{width:38px;height:38px;border-radius:50%;background:#fdf0f1;border:1px solid var(--signal);
+    display:flex;align-items:center;justify-content:center;margin-bottom:14px}
+  .confirm-icon svg{width:18px;height:18px}
+  .confirm-body h4{font-size:15px;font-weight:700;margin-bottom:8px}
+  .confirm-body p{font-size:13px;color:var(--muted);line-height:1.55}
+  .confirm-foot{display:flex;gap:10px;padding:18px 22px 22px}
+  .btn-warn{color:#fff;background:var(--warn);border-color:var(--warn)}
+  .btn-warn:hover{background:#7d0d12;border-color:#7d0d12;color:#fff}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(10px);
+    background:var(--ink);color:#fff;font-size:12.5px;padding:11px 18px;border-radius:2px;
+    opacity:0;pointer-events:none;transition:.2s;z-index:300;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  .hidden{display:none!important}
+  footer{padding:20px 28px 40px;font-size:10.5px;color:var(--muted2);border-top:1px solid var(--line)}
+
+  @media(max-width:1200px){.kpis{grid-template-columns:repeat(2,1fr)}.span4,.span8{grid-column:span 12}}
+  @media(max-width:900px){
+    .sidebar{width:64px}
+    .side-brand .sub,.side-brand h1,.nav-item span.lbl,.nav-label,.side-foot .who{display:none}
+    .side-brand{justify-content:center;padding:20px 8px 18px}
+    .nav-item{justify-content:center;padding:12px 0;border-left:none;border-radius:0}
+    .nav-item.active{border-left:none;border-bottom:3px solid var(--signal)}
+    .side-foot{justify-content:center}
+    .nav-loading{padding-left:0;justify-content:center}
+  }
+  @media(max-width:720px){.kpis{grid-template-columns:repeat(2,1fr)}.topbar{padding:14px 16px}.pagebody{padding:18px 16px}
+    .field-row{grid-template-columns:1fr}.searchbox input{min-width:130px}
+    .oup-toolbar{margin-left:0;width:100%}}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}.spinner{animation-duration:1.4s}}
+</style>
+</head>
+<body>
+
+<div class="page-loader" id="pageLoader">
+  <div class="pl-brand"><span class="tick"></span><span>Admin Console</span></div>
+  <div class="spinner"></div>
+  <div class="pl-text">Loading…</div>
+</div>
+
+<div class="shell">
+
+  <aside class="sidebar">
+    <div class="side-brand"><span class="tick"></span>
+      <div><h1>Admin Console</h1><div class="sub">Organizations</div></div>
+    </div>
+    <nav class="side-nav">
+      <div class="nav-label">Menu</div>
+      <button class="nav-item active" data-view="overview">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1"/><rect x="13" y="3.5" width="7.5" height="7.5" rx="1"/><rect x="3.5" y="13" width="7.5" height="7.5" rx="1"/><rect x="13" y="13" width="7.5" height="7.5" rx="1"/></svg>
+        <span class="lbl">Overview</span>
+      </button>
+      <div class="nav-loading" id="navLoadingOverview"><span class="spinner sm"></span>Loading…</div>
+
+      <button class="nav-item" data-view="orgs">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V4.6c0-.6.4-1 1-1h6c.6 0 1 .4 1 1V21"/><path d="M14 21v-9.4c0-.6.4-1 1-1h4c.6 0 1 .4 1 1V21"/><path d="M2 21h20"/><path d="M6.5 7.5h1M6.5 11h1M6.5 14.5h1M9.5 7.5h1M9.5 11h1M9.5 14.5h1M17 13.5h1M17 17h1"/></svg>
+        <span class="lbl">Organizations</span>
+        <span class="nc" id="navOrgCount">–</span>
+      </button>
+      <div class="nav-loading" id="navLoadingOrgs"><span class="spinner sm"></span>Loading…</div>
+    </nav>
+    <div class="side-foot">
+      <div class="avatar-me">A</div>
+      <div class="who"><div class="w-name">Admin</div><div class="w-role">Administrator</div></div>
+      <button class="signout" id="signOutBtn" title="Sign out">⏻</button>
+    </div>
+  </aside>
+
+  <div class="main">
+
+    <div class="topbar">
+      <div>
+        <h2 id="tbTitle">Overview</h2>
+        <div class="tb-sub" id="tbSub">Account activity at a glance</div>
+      </div>
+      <div class="spacer"></div>
+      <div class="tb-actions hidden" id="tbOrgsActions">
+        <div class="searchbox"><input type="text" id="orgSearchInp" placeholder="Search organizations…"></div>
+        <button class="btn btn-red" id="addOrgBtn">+ Add organization</button>
+      </div>
+    </div>
+
+    <div class="pagebody">
+
+      <!-- ================= OVERVIEW ================= -->
+      <section class="view show" id="viewOverview">
+        <div class="eyebrow">Key metrics</div>
+        <div class="kpis" id="kpis"></div>
+
+        <div class="eyebrow section-gap">Organizations &amp; growth</div>
+        <div class="grid">
+          <div class="panel span4"><h3>Organizations by status</h3>
+            <div class="ph-sub">ALL ORGANIZATIONS</div>
+            <div class="cwrap"><canvas id="cStatus"></canvas></div></div>
+          <div class="panel span8"><h3>New organizations over time</h3>
+            <div class="ph-sub">BY MONTH CREATED · LAST 8 MONTHS</div>
+            <div class="cwrap"><canvas id="cOrgGrowth"></canvas></div></div>
+        </div>
+      </section>
+
+      <!-- ================= ORGANIZATIONS ================= -->
+      <section class="view" id="viewOrgs">
+
+        <div class="org-list-panel" id="orgListPanel">
+          <div class="eyebrow">Organizations</div>
+          <div class="panel span12">
+            <div class="ph-sub" id="orgSub">— ORGANIZATIONS · CLICK A COLUMN TO SORT</div>
+            <div class="tblscroll"><table class="tbl" id="orgTable"></table></div>
+          </div>
+        </div>
+
+        <div class="org-users-panel" id="orgUsersPanel">
+          <div class="breadcrumb"><button id="backToOrgs">← Organizations</button><span class="bc-sep">/</span><span id="bcOrgName">Organization</span></div>
+          <div class="oup-head">
+            <div class="oup-org" id="dhOrgInitial">A</div>
+            <div><h3 id="dhOrgName">Organization</h3><div class="oup-sub" id="dhOrgSub">0 users</div></div>
+            <div class="oup-toolbar">
+              <div class="searchbox"><input type="text" id="userSearchInp" placeholder="Search name or email…"></div>
+              <button class="btn btn-red" id="addUserBtn">+ Add user</button>
+              <button class="btn" id="exportUsersBtn">⬇ Export</button>
+            </div>
+          </div>
+          <div class="filters" id="drawerFilters" style="margin-bottom:18px"></div>
+          <div class="panel span12">
+            <div class="ph-sub" id="dirSub">— USERS · CLICK A COLUMN TO SORT</div>
+            <div class="tblscroll"><table class="tbl" id="userTable"></table></div>
+          </div>
+        </div>
+
+      </section>
+
+    </div>
+
+    <footer>Admin Console · Organizations &amp; User Management · client-side demo — nothing is uploaded, no accounts are real.</footer>
+  </div>
+</div>
+
+<!-- ================= modal: add / edit organization ================= -->
+<div class="modal-ov" id="orgModalOv">
+  <div class="modal-card">
+    <div class="modal-head"><h4 id="orgModalTitle">Add organization</h4>
+      <button class="modal-x" id="orgModalClose">✕</button></div>
+    <div class="modal-body">
+      <form id="orgForm">
+        <div class="field"><label for="oName">Organization name</label><input type="text" id="oName" required></div>
+        <div class="field"><label for="oWebsite">Website</label><input type="text" id="oWebsite" placeholder="https://acme.com"></div>
+        <div class="field-row">
+          <div class="field"><label for="oSrId">SR Reporting ID</label><input type="text" id="oSrId" placeholder="Optional"></div>
+          <div class="field"><label for="oStatus">Status</label>
+            <select id="oStatus"><option value="true">Active</option><option value="false">Suspended</option></select></div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="orgModalCancel" type="button" style="flex:1">Cancel</button>
+      <button class="btn btn-red" id="orgModalSave" type="button" style="flex:1">Save organization</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= modal: add / edit user ================= -->
+<div class="modal-ov" id="modalOv">
+  <div class="modal-card">
+    <div class="modal-head"><h4 id="modalTitle">Add user</h4>
+      <button class="modal-x" id="modalClose">✕</button></div>
+    <div class="modal-body">
+      <form id="userForm">
+        <div class="field-row">
+          <div class="field"><label for="fFirstName">First name</label><input type="text" id="fFirstName" required></div>
+          <div class="field"><label for="fLastName">Last name</label><input type="text" id="fLastName"></div>
+        </div>
+        <div class="field"><label for="fEmail">Email</label><input type="email" id="fEmail" required></div>
+        <div class="field-row">
+          <div class="field"><label for="fRole">Role</label>
+            <select id="fRole"><option value="Admin">Admin</option><option value="Manager">Manager</option>
+              <option value="Member" selected>Member</option><option value="Viewer">Viewer</option></select></div>
+          <div class="field"><label for="fDept">Department</label>
+            <select id="fDept"><option>Human Resources</option><option>Engineering</option>
+              <option>Sales</option><option>Operations</option><option>Finance</option></select></div>
+        </div>
+        <div class="field"><label for="fActive">Status</label>
+          <select id="fActive"><option value="true" selected>Active</option><option value="false">Inactive</option></select></div>
+      </form>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="modalCancel" type="button" style="flex:1">Cancel</button>
+      <button class="btn btn-red" id="modalSave" type="button" style="flex:1">Save user</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= confirm dialog ================= -->
+<div class="modal-ov" id="confirmOv">
+  <div class="modal-card confirm-card">
+    <div class="confirm-body">
+      <div class="confirm-icon" id="confirmIcon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#e2000f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+      </div>
+      <h4 id="confirmTitle">Are you sure?</h4>
+      <p id="confirmMsg">This action cannot be undone.</p>
+    </div>
+    <div class="confirm-foot">
+      <button class="btn" id="confirmCancel" type="button" style="flex:1">Cancel</button>
+      <button class="btn btn-warn" id="confirmOk" type="button" style="flex:1">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="../assets/js/core/admin.js" type="module"></script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 import { lockBtn } from '../../app.js';
-import { initAuth, getCurrentUser, login } from './admin-auth.js';
+import { initAuth, getCurrentUser, login, logout } from './admin-auth.js';
 
 $(async function(){
     const token = await initAuth();
@@ -8,9 +8,13 @@ $(async function(){
         return;
     }
 
-    /* ================= API ================= */
-    // ⚠️ Point this at wherever the `supabase` function actually lives —
-    // e.g. '/api/supabase' behind a proxy, or the full Supabase Edge Function URL.
+    const user = await getCurrentUser();
+    if (user.data.role != 'admin'){
+        logout();
+        window.location.href = `./login.html`;
+        return;
+    }
+
     const API_URL = '/api/supabase';
 
     async function apiRequest(method, params, body){
@@ -89,10 +93,15 @@ $(async function(){
             statusBool: !!row.active,
             status: row.active ? 'Active' : 'Suspended',
             createdDate: row.created_at ? new Date(row.created_at) : null,
-            srReportingId: row.sr_reporting_id || ''
+            srReportingId: row.sr_reporting_id || '',
+            oauthKey: row.oauth_key || '',
+            jobsBi: row.jobs_bi || '',
+            positionsBi: row.positions_bi || '',
+            applicationsBi: row.applications_bi || '',
+            dashboardPath: row.dashboard_path || ''
         };
     }
-    // ⚠️ Best-guess field names — adjust once you share the real users table schema.
+   
     function mapUser(row, orgId){
         const name = [row.first_name, row.last_name].filter(Boolean).join(' ').trim();
         return {
@@ -160,49 +169,53 @@ $(async function(){
     });
     }
     function renderOrgTable(){
-    const rows=orgsSorted(orgsFiltered());
-    document.getElementById('orgSub').textContent=`${rows.length.toLocaleString()} ORGANIZATION${rows.length===1?'':'S'} · CLICK A COLUMN TO SORT`;
-    const arrow=k=>ORG_SORT.key===k?`<span class="arr">${ORG_SORT.dir<0?'▼':'▲'}</span>`:'';
-    const th=(k,l)=>`<th class="sortable" data-k="${k}">${l} ${arrow(k)}</th>`;
-    const t=document.getElementById('orgTable');
-    t.innerHTML=`<thead><tr>${th('name','Organization')}${th('status','Status')}${th('createdDate','Created')}<th></th></tr></thead>
-        <tbody>${rows.length?rows.map(o=>`<tr>
-        <td><div class="orgc"><div class="org-avatar" style="background:${colorFor(o.name)}">${initials(o.name)}</div>
+        const rows=orgsSorted(orgsFiltered());
+        document.getElementById('orgSub').textContent=`${rows.length.toLocaleString()} ORGANIZATION${rows.length===1?'':'S'} · CLICK A COLUMN TO SORT`;
+        const arrow=k=>ORG_SORT.key===k?`<span class="arr">${ORG_SORT.dir<0?'▼':'▲'}</span>`:'';
+        const th=(k,l)=>`<th class="sortable" data-k="${k}">${l} ${arrow(k)}</th>`;
+        const t=document.getElementById('orgTable');
+        t.innerHTML=`<thead><tr>${th('name','Organization')}${th('status','Status')}${th('createdDate','Created')}<th></th></tr></thead>
+            <tbody>${rows.length?rows.map(o=>`<tr>
+                    <td><div class="orgc org-open" data-id="${o.id}"><div class="org-avatar" style="background:${colorFor(o.name)}">${initials(o.name)}</div>
             <div><div class="o-name">${o.name}</div><div class="o-domain">${o.website||'—'}</div></div></div></td>
-        <td><span class="stpill"><span class="dot ${o.status==='Active'?'g':'r'}"></span>${o.status}</span></td>
-        <td style="color:var(--muted)">${fmtDay(o.createdDate)}</td>
-        <td><div class="rowactions">
-            <button class="rowbtn primary" data-act="users" data-id="${o.id}">Users</button>
-            <button class="rowbtn" data-act="edit" data-id="${o.id}">Edit</button>
-            <button class="rowbtn danger" data-act="delete" data-id="${o.id}">Deactivate</button>
-        </div></td></tr>`).join(''):`<tr class="empty-row"><td colspan="4">No organizations match this search.</td></tr>`}</tbody>`;
-    t.querySelectorAll('th.sortable').forEach(h=>h.onclick=()=>{const k=h.dataset.k;
-        if(ORG_SORT.key===k)ORG_SORT.dir*=-1;else ORG_SORT={key:k,dir:1};renderOrgTable();});
-    t.querySelectorAll('.rowbtn').forEach(b=>b.onclick=async ()=>{
-        const id=b.dataset.id, act=b.dataset.act, o=ORGS.find(x=>x.id===id); if(!o)return;
-        if(act==='users')openDrawer(o);
-        else if(act==='edit')openOrgModal(o);
-        else if(act==='delete'){
-        const ok=await confirmDialog({
-            title:'Deactivate organization?',
-            message:`${o.name} will show as Suspended and can be re-activated later from Edit.`,
-            confirmLabel:'Deactivate'
+            <td><span class="stpill"><span class="dot ${o.status==='Active'?'g':'r'}"></span>${o.status}</span></td>
+            <td style="color:var(--muted)">${fmtDay(o.createdDate)}</td>
+            <td><div class="rowactions">
+                <button class="rowbtn primary" data-act="users" data-id="${o.id}">Users</button>
+                <button class="rowbtn" data-act="edit" data-id="${o.id}">Edit</button>
+                <button class="rowbtn danger" data-act="delete" data-id="${o.id}">Deactivate</button>
+            </div></td></tr>`).join(''):`<tr class="empty-row"><td colspan="4">No organizations match this search.</td></tr>`}</tbody>`;
+        t.querySelectorAll('th.sortable').forEach(h=>h.onclick=()=>{const k=h.dataset.k;
+            if(ORG_SORT.key===k)ORG_SORT.dir*=-1;else ORG_SORT={key:k,dir:1};renderOrgTable();});
+        t.querySelectorAll('.rowbtn').forEach(b=>b.onclick=async ()=>{
+            const id=b.dataset.id, act=b.dataset.act, o=ORGS.find(x=>x.id===id); if(!o)return;
+            if(act==='users')openDrawer(o);
+            else if(act==='edit')openOrgModal(o);
+            else if(act==='delete'){
+            const ok=await confirmDialog({
+                title:'Deactivate organization?',
+                message:`${o.name} will show as Suspended and can be re-activated later from Edit.`,
+                confirmLabel:'Deactivate'
+            });
+            if(!ok)return;
+            const orig=b.textContent;
+            b.disabled=true; b.textContent='…';
+            try{
+                await updateOrganisation(o.id,{active:false});
+                o.statusBool=false; o.status='Suspended';
+                showToast(`${o.name} deactivated.`);
+                renderOrgTable(); refreshNavCount(); renderKPIs(); renderOverviewCharts();
+            }catch(err){
+                console.error(err);
+                showToast(err.message||'Could not deactivate organization.');
+                b.disabled=false; b.textContent=orig;
+            }
+            }
         });
-        if(!ok)return;
-        const orig=b.textContent;
-        b.disabled=true; b.textContent='…';
-        try{
-            await updateOrganisation(o.id,{active:false});
-            o.statusBool=false; o.status='Suspended';
-            showToast(`${o.name} deactivated.`);
-            renderOrgTable(); refreshNavCount(); renderKPIs(); renderOverviewCharts();
-        }catch(err){
-            console.error(err);
-            showToast(err.message||'Could not deactivate organization.');
-            b.disabled=false; b.textContent=orig;
-        }
-        }
-    });
+
+        t.querySelectorAll('.org-open').forEach(el=>el.onclick=()=>{
+            const o=ORGS.find(x=>x.id===el.dataset.id); if(o)openDrawer(o);
+        });
     }
     let orgSearchTimer=null;
     document.getElementById('orgSearchInp').addEventListener('input',e=>{
@@ -256,73 +269,143 @@ $(async function(){
     }
     };
 
+    document.getElementById('saveIntegrationsBtn').onclick = async () => {
+        if(!CURRENT_ORG_ID) return;
+        const org = ORGS.find(o=>o.id===CURRENT_ORG_ID); if(!org) return;
+        const oauthKey = document.getElementById('intOauthKey').value.trim();
+        const jobsBi = document.getElementById('intJobsBi').value.trim();
+        const positionsBi = document.getElementById('intPositionsBi').value.trim();
+        const applicationsBi = document.getElementById('intApplicationsBi').value.trim();
+        const payload = {
+            oauth_key: oauthKey || null,
+            jobs_bi: jobsBi || null,
+            positions_bi: positionsBi || null,
+            applications_bi: applicationsBi || null
+        };
+        const btn = document.getElementById('saveIntegrationsBtn'), orig = btn.textContent;
+        btn.disabled = true; btn.textContent = 'Saving…';
+        try{
+            await updateOrganisation(CURRENT_ORG_ID, payload);
+            Object.assign(org, { oauthKey, jobsBi, positionsBi, applicationsBi });
+            showToast('Integrations saved.');
+        }catch(err){
+            console.error(err);
+            showToast(err.message || 'Could not save integrations.');
+        }finally{
+            btn.disabled = false; btn.textContent = orig;
+        }
+    };
+
+    document.getElementById('saveConfigurationsBtn').onclick = async () => {
+        if(!CURRENT_ORG_ID) return;
+        const org = ORGS.find(o=>o.id===CURRENT_ORG_ID); if(!org) return;
+        const dashboardPath = document.getElementById('cfgDashboardPath').value.trim();
+        const payload = { dashboard_path: dashboardPath || null };
+
+        const btn = document.getElementById('saveConfigurationsBtn'), orig = btn.textContent;
+        btn.disabled = true; btn.textContent = 'Saving…';
+        try{
+            await updateOrganisation(CURRENT_ORG_ID, payload);
+            Object.assign(org, { dashboardPath });
+            showToast('Configuration saved.');
+        }catch(err){
+            console.error(err);
+            showToast(err.message || 'Could not save configuration.');
+        }finally{
+            btn.disabled = false; btn.textContent = orig;
+        }
+    };
+
     /* ================= inline panel: users of one organization ================= */
     let CURRENT_ORG_ID=null;
     const userFilters={role:new Set(),department:new Set(),status:new Set(),search:''};
     let USER_SORT={key:'name',dir:1}, EDIT_USER_ID=null;
 
     async function openDrawer(org){
-    CURRENT_ORG_ID=org.id;
-    userFilters.role.clear();userFilters.department.clear();userFilters.status.clear();userFilters.search='';
-    document.getElementById('userSearchInp').value='';
-    document.getElementById('dhOrgInitial').textContent=initials(org.name);
-    document.getElementById('dhOrgInitial').style.background=colorFor(org.name);
-    document.getElementById('dhOrgName').textContent=org.name;
-    document.getElementById('bcOrgName').textContent=org.name;
-    document.getElementById('orgListPanel').classList.add('hidden');
-    document.getElementById('orgUsersPanel').classList.add('show');
-    document.getElementById('tbOrgsActions').classList.add('hidden');
+        CURRENT_ORG_ID=org.id;
+        switchOupTab('users');
+         populateIntegrationsTab(org);
+         populateConfigurationsTab(org);
+        userFilters.role.clear();userFilters.department.clear();userFilters.status.clear();userFilters.search='';
+        document.getElementById('userSearchInp').value='';
+        document.getElementById('dhOrgInitial').textContent=initials(org.name);
+        document.getElementById('dhOrgInitial').style.background=colorFor(org.name);
+        document.getElementById('dhOrgName').textContent=org.name;
+        document.getElementById('bcOrgName').textContent=org.name;
+        document.getElementById('orgListPanel').classList.add('hidden');
+        document.getElementById('orgUsersPanel').classList.add('show');
+        document.getElementById('tbOrgsActions').classList.add('hidden');
 
-    if(usersCache.has(org.id)){
-        CURRENT_ORG_USERS=usersCache.get(org.id);
+        if(usersCache.has(org.id)){
+            CURRENT_ORG_USERS=usersCache.get(org.id);
+            document.getElementById('dhOrgSub').textContent=`${CURRENT_ORG_USERS.length} users · ${org.website||''}`;
+            buildDrawerFilters(); renderUserTable();
+            return;
+        }
+
+        document.getElementById('dhOrgSub').innerHTML='<span class="spinner sm"></span> Loading users…';
+        document.getElementById('userTable').innerHTML=`<tbody><tr class="empty-row"><td><span class="spinner sm"></span> Loading users…</td></tr></tbody>`;
+        document.getElementById('drawerFilters').innerHTML='';
+        try{
+            const rows=await fetchOrganisationUsers(org.id);
+            CURRENT_ORG_USERS=rows.map(r=>mapUser(r,org.id));
+            usersCache.set(org.id,CURRENT_ORG_USERS);
+        }catch(err){
+            console.error(err);
+            showToast('Could not load users for this organization.');
+            CURRENT_ORG_USERS=[];
+        }
         document.getElementById('dhOrgSub').textContent=`${CURRENT_ORG_USERS.length} users · ${org.website||''}`;
-        buildDrawerFilters(); renderUserTable();
-        return;
-    }
-
-    document.getElementById('dhOrgSub').innerHTML='<span class="spinner sm"></span> Loading users…';
-    document.getElementById('userTable').innerHTML=`<tbody><tr class="empty-row"><td><span class="spinner sm"></span> Loading users…</td></tr></tbody>`;
-    document.getElementById('drawerFilters').innerHTML='';
-    try{
-        const rows=await fetchOrganisationUsers(org.id);
-        CURRENT_ORG_USERS=rows.map(r=>mapUser(r,org.id));
-        usersCache.set(org.id,CURRENT_ORG_USERS);
-    }catch(err){
-        console.error(err);
-        showToast('Could not load users for this organization.');
-        CURRENT_ORG_USERS=[];
-    }
-    document.getElementById('dhOrgSub').textContent=`${CURRENT_ORG_USERS.length} users · ${org.website||''}`;
-    buildDrawerFilters();
-    renderUserTable();
+        buildDrawerFilters();
+        renderUserTable();
     }
     function closeDrawer(){
-    document.getElementById('orgUsersPanel').classList.remove('show');
-    document.getElementById('orgListPanel').classList.remove('hidden');
-    document.getElementById('tbOrgsActions').classList.remove('hidden');
-    CURRENT_ORG_ID=null;
+        document.getElementById('orgUsersPanel').classList.remove('show');
+        document.getElementById('orgListPanel').classList.remove('hidden');
+        document.getElementById('tbOrgsActions').classList.remove('hidden');
+        CURRENT_ORG_ID=null;
     }
+
+    function switchOupTab(tab){
+        document.querySelectorAll('#oupTabs .tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+        document.getElementById('tabUsers').classList.toggle('show',tab==='users');
+        document.getElementById('tabIntegrations').classList.toggle('show',tab==='integrations');
+        document.getElementById('tabConfigurations').classList.toggle('show',tab==='configurations');
+    }
+    document.querySelectorAll('#oupTabs .tab-btn').forEach(b=>b.onclick=()=>switchOupTab(b.dataset.tab));
+
+    function populateIntegrationsTab(org){
+        document.getElementById('intOauthKey').value = org.oauthKey || '';
+        document.getElementById('intJobsBi').value = org.jobsBi || '';
+        document.getElementById('intPositionsBi').value = org.positionsBi || '';
+        document.getElementById('intApplicationsBi').value = org.applicationsBi || '';
+    }
+
+    function populateConfigurationsTab(org){
+        document.getElementById('cfgDashboardPath').value = org.dashboardPath || '';
+    }
+
     document.getElementById('backToOrgs').onclick=closeDrawer;
 
     function usersFiltered(){
-    return CURRENT_ORG_USERS.filter(u=>{
-        if(userFilters.search){const q=userFilters.search.toLowerCase();
-        if(!(u.name||'').toLowerCase().includes(q)&&!(u.email||'').toLowerCase().includes(q))return false;}
-        if(userFilters.role.size&&!userFilters.role.has(u.role))return false;
-        if(userFilters.department.size&&!userFilters.department.has(u.department))return false;
-        if(userFilters.status.size&&!userFilters.status.has(u.status))return false;
-        return true;
-    });
+        return CURRENT_ORG_USERS.filter(u=>{
+            if(userFilters.search){const q=userFilters.search.toLowerCase();
+            if(!(u.name||'').toLowerCase().includes(q)&&!(u.email||'').toLowerCase().includes(q))return false;}
+            if(userFilters.role.size&&!userFilters.role.has(u.role))return false;
+            if(userFilters.department.size&&!userFilters.department.has(u.department))return false;
+            if(userFilters.status.size&&!userFilters.status.has(u.status))return false;
+            return true;
+        });
     }
     function usersSorted(rows){
-    const {key,dir}=USER_SORT;
-    return rows.slice().sort((a,b)=>{
-        let av=a[key],bv=b[key];
-        if(av==null&&bv==null)return 0; if(av==null)return 1; if(bv==null)return -1;
-        if(av instanceof Date)return (av-bv)*dir;
-        if(typeof av==='string')return av.localeCompare(bv)*dir;
-        return (av-bv)*dir;
-    });
+        const {key,dir}=USER_SORT;
+        return rows.slice().sort((a,b)=>{
+            let av=a[key],bv=b[key];
+            if(av==null&&bv==null)return 0; if(av==null)return 1; if(bv==null)return -1;
+            if(av instanceof Date)return (av-bv)*dir;
+            if(typeof av==='string')return av.localeCompare(bv)*dir;
+            return (av-bv)*dir;
+        });
     }
     function renderUserTable(){
         const rows=usersSorted(usersFiltered());
@@ -553,7 +636,11 @@ $(async function(){
 
     function showToast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');
     clearTimeout(showToast._t);showToast._t=setTimeout(()=>el.classList.remove('show'),2600);}
-    document.getElementById('signOutBtn').onclick=()=>{window.location.href='admin-login.html';};
+    document.getElementById('signOutBtn').onclick=async ()=>{
+        try{ showToast('Logging out...');await logout(); }
+        catch(err){ console.error('[auth] logout error:', err); }
+        window.location.href = `./login.html`;
+    };
 
     /* ---------- themed confirm dialog (Promise<boolean>, replaces window.confirm) ---------- */
     function confirmDialog({title='Are you sure?', message='This action cannot be undone.', confirmLabel='Confirm'}={}){

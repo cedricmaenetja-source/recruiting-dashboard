@@ -214,13 +214,35 @@
 
 <script type="module">
   import { lockBtn } from './assets/app.js';
-    import { initAuth, getCurrentUser, login } from './assets/js/core/auth.js';
+    import { initAuth, getCurrentUser, login, logout } from './assets/js/core/auth.js';
 
     (async () => {
+      const errEl = document.getElementById('errMsg');
+
       try {
         const token = await initAuth();
         if (token) {
-          window.location.href = './';
+          const res = await fetch('/api/verify-token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token:token })
+          });
+        
+          const data = await res.json();
+          if (data.error){
+            errEl.textContent = data.error;
+            errEl.classList.add('show');
+            return;
+          }
+
+          if (!data.dashboard_path){
+            errEl.textContent = 'Error logging you in. Please contact your administrator or try again later.';
+            errEl.classList.add('show');
+            await logout();
+            return;
+          }
+
+          window.location.href = `./${data.dashboard_path}`;
           return;
         }
       } catch (err) {
@@ -255,7 +277,12 @@
             return;
           }
 
-          window.location.href = './';
+          if (!result.dashboard_path){
+            window.location.href = `./`;
+            return;
+          }
+
+          window.location.href = `./${result.dashboard_path}`;
         } catch (err) {
           console.error('Login error:', err);
           errEl.textContent = 'Something went wrong signing you in. Please try again.';

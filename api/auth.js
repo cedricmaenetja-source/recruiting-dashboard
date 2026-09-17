@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     
     const { data: user, error } = await supabase
         .from('tbldashboardorganisationusers')
-        .select('id, first_name, last_name, email, role, password')
+        .select('id, first_name, organisation_id, last_name, email, role, password')
         .eq('email', email)
         .eq('active', true)
         .single();
@@ -33,7 +33,22 @@ export default async function handler(req, res) {
         return res.status(401).json({ error: 'Invalid logins.' });
     }
     
-    const payload = { userId: user.id, role: user.role };
+    const { data: org, error: orgError } = await supabase
+        .from('tbldashboardorganisations')
+        .select('*')
+        .eq('id', user.organisation_id)
+        .eq('active', true)
+        .single();
+    
+    if (orgError || !org) {
+        return res.status(401).json({ error: 'Invalid logins.' });
+    }
+
+    if (!user.organisation_id){
+        return res.status(401).json({ error: 'Invalid logins.' });
+    }
+    
+    const payload = { userId: user.id, role: user.role, dashboard_path: org.dashboard_path, organisation_id: org.id};
     
     const accessToken = jwt.sign(payload, ACCESS_SECRET, { expiresIn: '15m' });
     const refreshToken = jwt.sign(payload, REFRESH_SECRET, { expiresIn: '7d' });
@@ -55,6 +70,8 @@ export default async function handler(req, res) {
     return res.status(200).json({
         loggedIn: true,
         accessToken,
-        user: safeUser
+        user: safeUser,
+        dashboard_path: org.dashboard_path,
+        organisation_id: org.id
     });
 }

@@ -18,8 +18,9 @@ import { initAuth, getCurrentUser, logout } from './auth.js';
         return;
     }
     
-    loader.classList.add('hide');
+    await loadAllData(token);
 
+    loader.classList.add('hide');
     const w=console.warn.bind(console),e=console.error.bind(console),l=console.log.bind(console);
   const skip=a=>typeof a==='string'&&/bad uncompressed size/i.test(a);
   console.warn=(...a)=>{if(!skip(a[0]))w(...a);};
@@ -1147,6 +1148,118 @@ function maybeRender(){
   document.getElementById('dash').classList.remove('hidden');
   refresh();
   syncStickyTop();
+}
+
+/* ---------- row mappers: SmartRecruiters JSON/CSV → internal field names ---------- */
+function mapJobRow(row){
+    return {
+        jobId: row['Job ID'] || '',
+        jobStatus: (row['Job Status'] || '').toUpperCase(),
+        ref: '', title: '', country: '', unit: '', division: '', family: '', contract: '',
+        recruiter: '', recruiterList: [], created: null
+    };
+}
+function mapPosRow(row){
+    return { jobId: row['Job ID'], positionId: row['Position ID'], posStatus: row['Position Status'] };
+}
+function mapAppRow(row){
+    return {
+        jobId: row['Job ID'] || '',
+        ref: row['Job Ref ID'] || '',
+        title: row['Job Title'] || '',
+        country: row['Job Country/Region'] || '',
+        recruiter: row['Recruiters'] || '',
+        recruiterList: splitList(row['Recruiters']),
+        jobStatus: row['Job Status'] || '',
+        unit: row['Staubli unit'] || '',
+        created: toDate(row['Default Job Ad Creation Date']),
+        applied: toDate(row['Application State: New Date']),
+        source: row['Candidate Source'] || '',
+        sourceType: row['Candidate Source Type'] || '',
+        sourceSub: row['Candidate Source Subtype'] || '',
+        preReject: row['Application Status Before Rejection'] || '',
+        offer: toDate(row['Latest Offer extended date']),
+        dSubmit: toDate(row['Application Status: In-Review/Submitted to Manager Date']),
+        dInterview: toDate(row['Application State: Interview Date']),
+        dOffer: toDate(row['Application State: Offer Date']),
+        hired: toDate(row['Application State: Hired Date']),
+        division: row['Division'] || '',
+        family: row['Job family'] || '',
+        confidential: row['Confidential'] || '',
+        contract: row['Contract type'] || '',
+        origin: row['Origin'] || '(manually added)',
+        rejectReason: row['Application Reason For Rejection'] || '',
+        withdrawReason: row['Application Reason For Withdrawal'] || '',
+        tLead: numOrNull(row['Time In Application State: Lead']),
+        tNew: numOrNull(row['Time In Application State: New']),
+        tReview: numOrNull(row['Time In Application State: In-Review']),
+        tOffered: numOrNull(row['Time In Application State: Offered']),
+        tInterview: numOrNull(row['Time In Application State: Interview']),
+        tVideo: numOrNull(row['Time in Application Status: Interview/Video Interview']),
+        tOnsite: numOrNull(row['Time in Application Status: Interview/On-Site Interview']),
+        tOnsite2: numOrNull(row['Time in Application Status: Interview/On-Site Interview 2']),
+        tFinal: numOrNull(row['Time in Application Status: Interview/Final Interview']),
+        tjsCreated: numOrNull(row['Time in Job Status: CREATED']),
+        tjsSourcing: numOrNull(row['Time in Job Status: SOURCING']),
+        tjsInterview: numOrNull(row['Time in Job Status: INTERVIEW']),
+        tjsOffer: numOrNull(row['Time in Job Status: OFFER']),
+        tjsOnHold: numOrNull(row['Time in Job Status: ON HOLD'])
+    };
+}
+
+async function fetchReport(kind, token){
+    const res = await fetch(`/api/reports?kind=${kind}`, {
+        headers: { 'Authorization': `Bearer ${token}` } 
+    });
+    if (!res.ok) {
+        let msg = `Could not load ${kind} report (${res.status})`;
+        try { const j = await res.json(); if (j?.error) msg = j.error; } catch {}
+        throw new Error(msg);
+    }
+    const data = await res.json();
+    return Array.isArray(data) ? data : (data?.content ?? data?.data ?? data?.rows ?? []);
+}
+
+async function loadAllData(token){
+    const err = document.getElementById('err');
+    err.classList.remove('show');
+
+    const plText = document.querySelector('#pageLoader .pl-text');
+    if (plText) plText.textContent = 'Fetching reports from SmartRecruiters…';
+
+    try{
+        const [appRows, posRows, jobRows] = await Promise.all([
+            fetchReport('applications', token),
+            fetchReport('positions', token),
+            fetchReport('jobs', token)
+        ]);
+        if (!appRows.length) throw new Error('No application records returned.');
+
+        APP = appRows.map(mapAppRow);
+        POS = posRows.map(mapPosRow);
+        JOBS = jobRows.map(mapJobRow);
+
+        markLoaded('app', APP.length);
+        markLoaded('pos', POS.length);
+        markLoaded('jobs', JOBS.length);
+        showJoin();
+        maybeRender();
+    }catch(ex){
+        err.textContent = ex.message || 'Could not load data.';
+        err.classList.add('show');
+    }
+}
+
+function setLoadStatus(kind, count){
+    // optional: update a loading indicator per dataset while paginating, e.g.
+    const el = document.getElementById(`fileStatus_${kind}`);
+    if (el) el.textContent = `Loading… ${count.toLocaleString()} rows so far`;
+}
+function markLoaded(kind, count){
+    const ids = {app:['slotApp','fileApp'], pos:['slotPos','filePos'], jobs:['slotJobs','fileJobs']}[kind];
+    const slot = document.getElementById(ids[0]), fileEl = document.getElementById(ids[1]);
+    if (slot) slot.classList.add('filled');
+    if (fileEl) fileEl.textContent = `✓ ${count.toLocaleString()} rows loaded`;
 }
 
 /* ---------- file wiring ---------- */

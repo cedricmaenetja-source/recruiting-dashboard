@@ -269,6 +269,18 @@
     .field-row{grid-template-columns:1fr}.searchbox input{min-width:130px}
     .oup-toolbar{margin-left:0;width:100%}}
   @media(prefers-reduced-motion:reduce){*{transition:none!important}.spinner{animation-duration:1.4s}}
+    .oup-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto}
+
+  .tabbar{display:flex;gap:22px;border-bottom:1px solid var(--line);margin-bottom:20px}
+  .tab-btn{font-family:var(--sans);font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--muted);background:none;border:none;padding:0 0 10px;cursor:pointer;
+    border-bottom:2px solid transparent;transition:.13s}
+  .tab-btn:hover{color:var(--ink)}
+  .tab-btn.active{color:var(--signal);border-bottom-color:var(--signal)}
+  .tab-pane{display:none}
+  .tab-pane.show{display:block}
+  .org-open{cursor:pointer}
+  .org-open:hover .o-name{color:var(--signal)}
 </style>
 </head>
 <body>
@@ -361,10 +373,43 @@
               <button class="btn" id="exportUsersBtn">⬇ Export</button>
             </div>
           </div>
-          <div class="filters" id="drawerFilters" style="margin-bottom:18px"></div>
-          <div class="panel span12">
-            <div class="ph-sub" id="dirSub">— USERS · CLICK A COLUMN TO SORT</div>
-            <div class="tblscroll"><table class="tbl" id="userTable"></table></div>
+          <div class="tabbar" id="oupTabs">
+            <button class="tab-btn active" data-tab="users" type="button">Users</button>
+            <button class="tab-btn" data-tab="integrations" type="button">Integrations</button>
+            <button class="tab-btn" data-tab="configurations" type="button">Configurations</button>
+          </div>
+
+          <div class="tab-pane show" id="tabUsers">
+            <div class="filters" id="drawerFilters" style="margin-bottom:18px"></div>
+            <div class="panel span12">
+              <div class="ph-sub" id="dirSub">— USERS · CLICK A COLUMN TO SORT</div>
+              <div class="tblscroll"><table class="tbl" id="userTable"></table></div>
+            </div>
+          </div>
+
+          <div class="tab-pane" id="tabIntegrations">
+            <div class="panel span12" style="max-width:520px">
+              <h3>SR Integrations</h3>
+              <div class="ph-sub">API KEYS &amp; BI CONNECTIONS</div>
+              <div class="field"><label for="intOauthKey">OAuth Key</label>
+                <input type="text" id="intOauthKey" placeholder="Enter OAuth key"></div>
+              <div class="field"><label for="intJobsBi">Jobs BI</label>
+                <input type="text" id="intJobsBi" placeholder="Jobs BI identifier"></div>
+              <div class="field"><label for="intPositionsBi">Positions BI</label>
+                <input type="text" id="intPositionsBi" placeholder="Positions BI identifier"></div>
+              <div class="field"><label for="intApplicationsBi">Applications BI</label>
+                <input type="text" id="intApplicationsBi" placeholder="Applications BI identifier"></div>
+              <button class="btn btn-red" id="saveIntegrationsBtn" type="button">Save integrations</button>
+            </div>
+          </div>
+          <div class="tab-pane" id="tabConfigurations">
+            <div class="panel span12" style="max-width:520px">
+              <h3>Configurations</h3>
+              <div class="ph-sub">DASHBOARD SETTINGS</div>
+              <div class="field"><label for="cfgDashboardPath">Dashboard Path</label>
+                <input type="text" id="cfgDashboardPath" placeholder="/dashboard/acme"></div>
+              <button class="btn btn-red" id="saveConfigurationsBtn" type="button">Save configuration</button>
+            </div>
           </div>
         </div>
 

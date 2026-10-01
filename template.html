@@ -1,43 +1,772 @@
-import { initAuth, getCurrentUser, logout } from './auth.js';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stäubli — Recruitment Data and Analytics Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
+<style>
+  :root{
+    --ground:#ececec; --panel:#ffffff; --panel2:#f4f4f4; --line:#e2e2e2;
+    --line2:#cfcfcf; --ink:#1d1d1b; --muted:#63656a; --muted2:#8c8e93;
+    --signal:#e2000f;                                   /* Stäubli red */
+    --steel:#5b5d63; --steel2:#8d8f95; --steel3:#54565b; --steel4:#b4b6bb;  /* graphite chart tones */
+    --amber:#b8860b; --good:#e2000f; --warn:#a01018;    /* filled = brand red, open = grey */
+    --mono:'Helvetica Neue',Arial,'Inter',sans-serif;
+    --sans:'Inter',system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;
+    line-height:1.5;-webkit-font-smoothing:antialiased;font-feature-settings:"tnum";
+    background-image:none}
 
+  header{position:sticky;top:0;z-index:60;background:#fff;
+    border-bottom:1px solid var(--line);box-shadow:0 1px 0 rgba(0,0,0,.02)}
+  .bar{display:flex;align-items:center;gap:20px;padding:16px 26px;max-width:1560px;margin:0 auto;flex-wrap:wrap}
+  .brand{display:flex;align-items:baseline;gap:11px}
+  .tick{width:10px;height:20px;background:var(--signal);border-radius:0;transform:translateY(3px)}
+  .brand h1{font-size:16px;font-weight:700;letter-spacing:0}
+  .brand .sub{font-family:var(--sans);font-size:10.5px;color:var(--muted2);text-transform:uppercase;letter-spacing:.16em}
+  .bar .spacer{flex:1}
+  .btn{font-family:var(--sans);font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--ink);background:#fff;border:1px solid var(--line2);padding:9px 16px;border-radius:2px;
+    cursor:pointer;transition:.15s}
+  .btn:hover{border-color:var(--signal);color:var(--signal)}
+
+  main{max-width:1560px;margin:0 auto;padding:24px 26px}
+  .eyebrow{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--ink);margin:30px 0 16px;display:flex;align-items:center;gap:10px}
+  .eyebrow::before{content:"";width:14px;height:3px;background:var(--signal);flex:none}
+  .eyebrow:first-child{margin-top:6px}
+  .eyebrow::after{content:"";flex:1;height:1px;background:var(--line)}
+
+  /* two-slot loader */
+  .loader{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .loader3{grid-template-columns:1fr 1fr 1fr}
+  .slot{border:1.5px dashed var(--line2);border-radius:6px;padding:22px;background:var(--panel);
+    transition:.18s;cursor:pointer;position:relative}
+  .slot.hot{border-color:var(--signal);background:#fdf0f1}
+  .slot.filled{border-style:solid;border-color:var(--signal);cursor:default;background:#fff}
+  .slot .st-tag{font-family:var(--sans);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--muted2);display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .slot .st-dot{width:7px;height:7px;border-radius:50%;background:var(--line2)}
+  .slot.filled .st-dot{background:var(--signal)}
+  .slot .st-title{font-size:15px;font-weight:700;margin-bottom:4px}
+  .slot .st-hint{font-size:12px;color:var(--muted)}
+  .slot .st-file{font-family:var(--sans);font-weight:600;font-size:11.5px;color:var(--signal);margin-top:6px;word-break:break-all}
+  .slot .st-reload{position:absolute;top:16px;right:16px;font-family:var(--sans);font-size:10px;
+    color:var(--muted);text-decoration:underline;text-underline-offset:2px}
+  .slot.filled:hover .st-reload{color:var(--signal)}
+  .joinbar{margin-top:14px;font-family:var(--sans);font-size:11.5px;color:var(--muted);
+    background:#fff;border:1px solid var(--line);border-radius:2px;padding:12px 16px;display:none}
+  .joinbar.show{display:block}
+  .joinbar b{color:var(--signal)}
+  .joinbar .miss{color:var(--amber)}
+  .err{background:#fdf0f1;border:1px solid var(--signal);color:var(--signal);padding:13px 17px;
+    border-radius:2px;font-size:13px;margin-top:14px;display:none}
+  .err.show{display:block}
+
+  /* filters (multi-select) */
+  .filters{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  .ms{position:relative}
+  .filterbar{position:sticky;top:64px;z-index:55;background:var(--ground);
+    padding:14px 0 12px;margin-bottom:6px;box-shadow:0 6px 14px -10px rgba(0,0,0,.25)}
+  .filterbar::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--line2)}
+  .ms label{display:block;font-family:var(--sans);font-size:10px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--muted2);margin-bottom:6px}
+  .ms-btn{font-family:var(--sans);font-size:13px;color:var(--ink);background:#fff;
+    border:1px solid var(--line2);border-radius:2px;padding:8px 12px;min-width:158px;cursor:pointer;
+    display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .ms-btn:hover{border-color:var(--signal)}
+  .ms-btn .cnt{font-family:var(--sans);font-weight:600;font-size:10px;color:#fff;background:var(--signal);
+    border-radius:8px;padding:1px 6px;display:none}
+  .ms-btn.active{border-color:var(--signal)}
+  .ms-btn.active .cnt{display:inline}
+  .ms-btn .car{color:var(--muted2);font-size:10px}
+  .ms-pop{position:absolute;top:100%;left:0;margin-top:4px;background:#fff;
+    border:1px solid var(--line2);border-radius:2px;padding:6px;min-width:210px;max-height:280px;
+    overflow-y:auto;z-index:70;display:none;box-shadow:0 12px 30px rgba(0,0,0,.14)}
+  .ms-pop.open{display:block}
+  .ms-opt{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:3px;cursor:pointer;font-size:13px}
+  .ms-opt:hover{background:var(--panel)}
+  .ms-opt input{accent-color:var(--signal);width:14px;height:14px}
+  .reset{font-family:var(--mono);font-size:11px;color:var(--muted);background:none;border:none;
+    cursor:pointer;padding:9px 4px;text-decoration:underline;text-underline-offset:3px}
+  .reset:hover{color:var(--signal)}
+  /* date range */
+  .daterange label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--muted2);margin-bottom:6px}
+  .dr-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .dr-in{font-family:var(--sans);font-size:12.5px;color:var(--ink);background:#fff;
+    border:1px solid var(--line2);border-radius:2px;padding:7px 10px;color-scheme:light;cursor:pointer}
+  .dr-in:focus{outline:none;border-color:var(--signal)}
+  .dr-row .to{font-family:var(--sans);font-size:11px;color:var(--muted2)}
+  .qchips{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+  .qchip{font-family:var(--sans);font-size:10.5px;color:var(--muted);background:#fff;
+    border:1px solid var(--line2);border-radius:2px;padding:4px 9px;cursor:pointer;transition:.12s}
+  .qchip:hover{border-color:var(--signal);color:var(--signal)}
+  .qchip.on{background:var(--signal);border-color:var(--signal);color:#fff}
+
+  .kpis{display:grid;grid-template-columns:repeat(8,1fr);gap:1px;background:var(--line);
+    border:1px solid var(--line);border-radius:2px;overflow:hidden;margin-bottom:8px}
+  .kpi{background:var(--panel);padding:16px 16px 14px;position:relative}
+  .kpi .k-label{font-family:var(--sans);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted2);margin-bottom:9px;line-height:1.35;min-height:24px}
+  .kpi .k-val{font-family:var(--sans);font-size:26px;font-weight:700;line-height:1;letter-spacing:-.01em}
+  .kpi .k-unit{font-family:var(--sans);font-size:11px;color:var(--muted);margin-left:2px;font-weight:500}
+  .kpi.lead .k-val{color:var(--signal)}
+  .kpi.lead::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--signal)}
+  .kpi .k-note{font-family:var(--sans);font-size:9px;color:var(--muted2);margin-top:7px}
+
+  .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:18px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:2px;padding:18px 20px 20px;position:relative}
+  .panel h3{font-size:13.5px;font-weight:700}
+  .panel .ph-sub{font-family:var(--sans);font-size:10px;color:var(--muted2);letter-spacing:.04em;margin:2px 0 16px;text-transform:uppercase}
+  .span3{grid-column:span 3}.span4{grid-column:span 4}.span5{grid-column:span 5}
+  .span6{grid-column:span 6}.span7{grid-column:span 7}.span8{grid-column:span 8}.span12{grid-column:span 12}
+  .cwrap{position:relative;height:260px}
+  .cwrap.tall{height:330px}
+
+  /* heat map */
+  .heat{width:100%;border-collapse:separate;border-spacing:3px}
+  .heat th{font-family:var(--sans);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--muted2);font-weight:600;padding:4px 6px;text-align:center}
+  .heat th.rowh{text-align:left;min-width:150px}
+  .heat td{text-align:center;padding:0}
+  .heat .rh{font-size:12px;color:var(--ink);text-align:left;padding-right:10px;white-space:nowrap}
+  .cell{font-family:var(--sans);font-size:12.5px;font-weight:600;padding:11px 6px;border-radius:2px;
+    color:#fff;position:relative}
+  .cell.empty{color:var(--muted2);background:var(--panel2)!important}
+  .cell small{display:block;font-size:8.5px;opacity:.8;font-weight:400;margin-top:1px}
+  .heat-legend{display:flex;align-items:center;gap:8px;font-family:var(--sans);font-size:10px;
+    color:var(--muted2);margin-top:12px}
+  .heat-legend .ramp{height:9px;width:120px;border-radius:2px;
+    background:linear-gradient(90deg,#f3d5d7,#e98a92,#e2000f,#8f0a12)}
+  .heat-empty{border:1px dashed var(--line2);border-radius:2px;padding:22px 20px;color:var(--muted);
+    font-size:12.5px;background:var(--panel2)}
+  .heat-empty b{color:var(--ink);font-weight:600}
+
+  table.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+  .tbl th{font-family:var(--sans);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted2);text-align:left;padding:8px 10px;border-bottom:2px solid var(--line2);font-weight:600}
+  .tbl th.num,.tbl td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .tbl td{padding:9px 10px;border-bottom:1px solid var(--line)}
+  .tbl tbody tr:hover{background:var(--panel2)}
+  .tblscroll{max-height:520px;overflow:auto}
+  .drillchip{display:none;margin:0 0 12px}
+  .drillchip.show{display:block}
+  .dc-tag{display:inline-flex;align-items:center;gap:9px;font-size:12.5px;background:#fdf0f1;
+    border:1px solid var(--signal);color:var(--ink);border-radius:2px;padding:5px 12px}
+  .dc-tag b{color:var(--signal)}
+  .dc-x{cursor:pointer;color:var(--signal);font-weight:700;opacity:.7}
+  .dc-x:hover{opacity:1}
+  .tblscroll thead th{position:sticky;top:0;background:#fff;z-index:2}
+  .ttl{max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pill{font-family:var(--sans);font-size:10px;font-weight:600;padding:2px 7px;border-radius:2px;background:var(--panel2);
+    border:1px solid var(--line2);color:var(--muted)}
+  .flag{font-family:var(--sans);font-size:10.5px;color:var(--warn);margin-top:10px;display:flex;gap:7px}
+
+  /* metric definitions */
+  .defs{background:#fff;border:1px solid var(--line);border-radius:2px;border-left:3px solid var(--signal)}
+  .defs summary{list-style:none;cursor:pointer;padding:14px 18px;display:flex;justify-content:space-between;
+    align-items:center;font-weight:700;font-size:13px;color:var(--ink)}
+  .defs summary::-webkit-details-marker{display:none}
+  .defs .d-sum-h{font-weight:400;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2)}
+  .defs .d-sum-h::after{content:"click to expand"}
+  .defs[open] .d-sum-h::after{content:"click to collapse"}
+  .defs[open] summary{border-bottom:1px solid var(--line)}
+  .deftbl{font-size:12.5px}
+  .deftbl td{vertical-align:top;padding:9px 18px}
+  .deftbl th{padding:10px 18px}
+  .deftbl td.m{font-weight:700;color:var(--signal);white-space:nowrap}
+  .deftbl td:nth-child(2){color:var(--ink)}
+  .deftbl td:nth-child(3){color:var(--muted)}
+  .defs-note{font-size:11px;color:var(--muted2);padding:10px 18px 16px;font-style:italic}
+
+  /* job-ref validation control */
+  .jr-in{font-family:var(--sans);font-size:13px;color:var(--ink);background:#fff;border:1px solid var(--line2);
+    border-radius:2px;padding:8px 12px;min-width:190px}
+  .jr-in:focus{outline:none;border-color:var(--signal)}
+  .jr-in.on{border-color:var(--signal);font-weight:600}
+  .jr-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;max-width:230px}
+  .jr-chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;
+    background:#fdf0f1;border:1px solid var(--signal);color:var(--signal);border-radius:2px;padding:2px 7px}
+  .jr-chip b{cursor:pointer;font-weight:400;opacity:.7}
+  .jr-chip b:hover{opacity:1}
+  .jr-clear{font-size:10.5px;color:var(--muted);text-decoration:underline;text-underline-offset:2px;cursor:pointer;align-self:center}
+  .jr-clear:hover{color:var(--signal)}
+
+  /* guard banner */
+  .guardbar{display:none;margin:4px 0 0;background:#fdf0f1;border:1px solid var(--signal);border-left:3px solid var(--signal);
+    border-radius:2px;padding:13px 17px;font-size:13px;color:#8f0a12}
+  .guardbar.show{display:block}
+  .guardbar.warn{background:#fff8ec;border-color:var(--amber);border-left-color:var(--amber);color:#7a5b13}
+  .guardbar b{color:var(--signal)}
+  .guardbar.warn b{color:#7a5b13}
+  #reportBody.off{display:none}
+
+  /* insights */
+  .insights{background:#fff;border:1px solid var(--line);border-left:3px solid var(--signal);border-radius:2px;
+    padding:6px 6px}
+  .insights .ins{display:flex;gap:11px;padding:9px 14px;font-size:13px;color:var(--ink);align-items:flex-start}
+  .insights .ins+.ins{border-top:1px solid var(--line)}
+  .insights .ins::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:var(--signal);margin-top:6px}
+  .insights .ins b{font-weight:700}
+  .insights .none{padding:12px 14px;color:var(--muted2);font-size:12.5px}
+
+  /* stage conversion strip */
+  .cstrip{display:flex;align-items:stretch;flex-wrap:wrap;gap:0;margin-top:4px}
+  .cs-stage{flex:1 1 120px;min-width:110px;text-align:center;padding:14px 10px;
+    background:var(--panel2);border:1px solid var(--line);border-radius:2px}
+  .cs-val{font-size:30px;font-weight:700;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .cs-lab{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:8px}
+  .cs-sub{font-size:10.5px;color:var(--muted2);margin-top:5px}
+  .cs-stage:last-child .cs-val{color:var(--signal)}
+  .cs-conn{flex:0 0 118px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:0 6px;text-align:center}
+  .cs-pct{font-size:19px;font-weight:700;color:var(--signal);line-height:1;font-variant-numeric:tabular-nums}
+  .cs-pct.bad{color:var(--muted2);font-size:15px}
+  .cs-arrow{color:var(--line2);font-size:15px;margin:3px 0}
+  .cs-steplab{font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted2);line-height:1.3}
+  .cstrip-foot{margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+  .cstrip-foot b{color:var(--ink);font-size:14px}
+  .cs-caveat{color:var(--warn);font-size:11px}
+  .cs-notes{margin-top:12px;border-top:1px dashed var(--line2);padding-top:11px}
+  .cs-notes-h{font-family:var(--sans);font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
+  .cs-notes ul{margin:0;padding-left:16px}
+  .cs-notes li{font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:3px}
+  .cs-notes li b{color:var(--ink)}
+  .rec-ctrl{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);margin:2px 0 10px}
+  .rec-ctrl input{width:64px;padding:4px 6px;border:1px solid var(--line2);border-radius:5px;font:inherit;font-variant-numeric:tabular-nums;color:var(--ink);background:#fff}
+  .rec-legend{display:flex;align-items:center;gap:6px;margin-left:auto}
+  .rag-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 3px 0 10px;vertical-align:middle}
+  .rag-dot.g{background:#2e9e5b}.rag-dot.a{background:#e8a13a}.rag-dot.r{background:var(--signal)}
+  .rag-pill{display:inline-block;padding:1px 7px;border-radius:10px;font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums}
+  .rag-pill.g{background:rgba(46,158,91,.14);color:#217a45}.rag-pill.a{background:rgba(232,161,58,.16);color:#a9701a}.rag-pill.r{background:rgba(226,0,15,.12);color:var(--signal)}
+  .tbl th.sortable{cursor:pointer;user-select:none}.tbl th.sortable:hover{color:var(--ink)}
+  .tbl th .arr{opacity:.5;font-size:9px}
+  @media(max-width:760px){.cs-conn{flex-basis:100%;flex-direction:row;gap:8px;padding:8px 0}.cs-arrow{transform:rotate(90deg)}}
+
+  /* per-chart tools (expand + PNG) */
+  .chart-tools{position:absolute;top:13px;right:14px;display:flex;gap:6px;z-index:3}
+  .postoggle{display:inline-flex;gap:0;margin:-6px 0 12px;border:1px solid var(--line2);border-radius:2px;overflow:hidden;width:fit-content}
+  .postoggle button{font-family:var(--sans);font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--muted);background:#fff;border:none;border-right:1px solid var(--line2);padding:5px 12px;cursor:pointer;transition:.12s}
+  .postoggle button:last-child{border-right:none}
+  .postoggle button:hover{color:var(--signal)}
+  .postoggle button.on{background:var(--signal);color:#fff}
+  .ctbtn{font-family:var(--sans);font-size:9.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--muted);background:#fff;border:1px solid var(--line2);border-radius:2px;padding:3px 8px;cursor:pointer;transition:.12s}
+  .ctbtn:hover{border-color:var(--signal);color:var(--signal)}
+
+  /* fullscreen expand modal */
+  .modal-ov{position:fixed;inset:0;background:rgba(20,25,32,.55);z-index:200;display:none;
+    padding:3vh 3vw;backdrop-filter:blur(2px)}
+  .modal-ov.show{display:flex}
+  .modal-card{background:#fff;border-radius:4px;width:100%;max-width:1200px;margin:auto;
+    max-height:94vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.4)}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;gap:16px;
+    padding:16px 20px;border-bottom:1px solid var(--line)}
+  .modal-head #modalTitle{font-weight:700;font-size:15px}
+  .modal-actions{display:flex;gap:8px}
+  .modal-body{overflow:auto;padding:18px 20px 24px}
+  .modal-canvas-wrap{position:relative;width:100%}
+  .modal-canvas-wrap canvas{width:100%!important;height:100%!important;display:block}
+
+  .hidden{display:none!important}
+  footer{max-width:1560px;margin:30px auto 0;padding:20px 26px 40px;font-family:var(--sans);
+    font-size:10.5px;color:var(--muted2);border-top:1px solid var(--line)}
+  @media(max-width:1200px){.kpis{grid-template-columns:repeat(4,1fr)}
+    .span3,.span4,.span5,.span6,.span7,.span8{grid-column:span 6}}
+  @media(max-width:720px){.loader{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}
+    .span3,.span4,.span5,.span6,.span7,.span8,.span12{grid-column:span 12}.bar{padding:12px 16px}main{padding:16px}}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+  .page-loader{
+  position:fixed;inset:0;z-index:500;
+  background:var(--ground);
+  display:flex;align-items:center;justify-content:center;
+  transition:opacity .35s ease, visibility .35s ease;
+}
+.page-loader.hide{
+  opacity:0;visibility:hidden;pointer-events:none;
+}
+.pl-inner{display:flex;flex-direction:column;align-items:center;gap:16px}
+.pl-spinner{
+  width:38px;height:38px;border-radius:50%;
+  border:3px solid var(--line2);
+  border-top-color:var(--signal);
+  animation:pl-spin .8s linear infinite;
+}
+.pl-text{
+  font-family:var(--sans);font-size:11px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted2);
+}
+@keyframes pl-spin{ to{ transform:rotate(360deg); } }
+@media(prefers-reduced-motion:reduce){
+  .pl-spinner{animation-duration:1.6s}
+}
+.slot{cursor:default;}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand"><span class="tick"></span>
+      <div><h1>Stäubli</h1>
+        <div class="sub">Recruitment Data and Analytics Dashboard</div></div>
+    </div>
+    <div class="spacer"></div>
+    <!-- <button class="btn" id="reloadAll">↻ Load / swap files</button> -->
+    <button class="btn" id="logoutBtn">⏻ Logout</button>
+  </div>
+</header>
+
+<main>
+  <div id="pageLoader" class="page-loader">
+    <div class="pl-inner">
+      <div class="pl-spinner"></div>
+      <div class="pl-text">Loading dashboard…</div>
+    </div>
+  </div>
+  <!-- LOADER -->
+  <section id="loaderSec">
+    <div class="eyebrow">Data sources — merged on Job ID</div>
+    <div class="loader loader3">
+      <div class="slot" id="slotApp" data-kind="app">
+        <div class="st-tag"><span class="st-dot"></span>Applications · required</div>
+        <div class="st-title">Applications export</div>
+        <div class="st-hint">One row per application. Carries stages, sources, dates, hires.</div>
+        <div class="st-file" id="fileApp"></div>
+      </div>
+      <div class="slot" id="slotPos" data-kind="pos">
+        <div class="st-tag"><span class="st-dot"></span>Positions · optional</div>
+        <div class="st-title">Positions export</div>
+        <div class="st-hint">One row per position. Adds position status: open / filled / hired.</div>
+        <div class="st-file" id="filePos"></div>
+      </div>
+      <div class="slot" id="slotJobs" data-kind="jobs">
+        <div class="st-tag"><span class="st-dot"></span>Jobs · optional</div>
+        <div class="st-title">Jobs export</div>
+        <div class="st-hint">One row per job. Adds unit/division/country/ref/dates for full job-level accuracy.</div>
+        <div class="st-file" id="fileJobs"></div>
+      </div>
+    </div>
+    <div class="joinbar" id="joinbar"></div>
+    <div class="err" id="err"></div>
+    <input type="file" id="inpApp" accept=".xlsx,.xls" class="hidden">
+    <input type="file" id="inpPos" accept=".csv,.xlsx,.xls" class="hidden">
+    <input type="file" id="inpJobs" accept=".csv,.xlsx,.xls" class="hidden">
+  </section>
+
+  <!-- DASHBOARD -->
+  <section id="dash" class="hidden">
+    <div class="filterbar" id="filterbar">
+      <div class="eyebrow" style="margin-top:0">Filters — multi-select</div>
+      <div class="filters" id="filters"></div>
+    </div>
+    <div class="guardbar" id="guard"></div>
+
+    <div class="eyebrow">Metric definitions &amp; calculations</div>
+    <details class="defs" id="defsPanel" open>
+      <summary><span class="d-sum-t">How each metric is calculated</span><span class="d-sum-h"></span></summary>
+      <div style="overflow-x:auto">
+        <table class="tbl deftbl">
+          <thead><tr><th>Metric</th><th>Definition</th><th>Calculation (as computed here)</th></tr></thead>
+          <tbody>
+            <tr><td class="m">Time to Hire</td><td>Average days from candidate application to hire.</td><td>Mean of (Hired Date − New Date) across hired applications.</td></tr>
+            <tr><td class="m">Time to Fill</td><td>Average days from job posting to hire.</td><td>Mean of (Hired Date − Job Ad Creation Date) across hired applications.</td></tr>
+            <tr><td class="m">Number of Applications</td><td>Count of applications received.</td><td>Total application rows, grouped by Job ID.</td></tr>
+            <tr><td class="m">App → Interview</td><td>Share of applications that reached the interview stage.</td><td>Applications with an Interview Date ÷ all applications.</td></tr>
+            <tr><td class="m">Interview → Hire</td><td>Share of interviewed applicants who were hired.</td><td>Applications with both an Interview Date and a Hired Date ÷ applications with an Interview Date.</td></tr>
+            <tr><td class="m">Interviews per Hire</td><td>Number of interview rounds a hire went through.</td><td>Mean, across hires, of how many interview sub-stage columns are populated — Video, On-Site, On-Site 2, Final. Presence counts as one round each (day values are ignored); the parent “Time In Application State: Interview” is excluded.</td></tr>
+            <tr><td class="m">Offer Acceptance Rate</td><td>Share of extended offers that were accepted.</td><td>Applications with both an Offer Date and a Hired Date ÷ applications with an Offer Date.</td></tr>
+            <tr><td class="m">Source of Hire</td><td>Channel that produced each hire.</td><td>Hired applications grouped by the selected dimension — Source, Sub source, or Source type (toggle).</td></tr>
+            <tr><td class="m">Stage Conversion</td><td>Step-by-step progression through the pipeline.</td><td>Stages counted from the stage <b>date</b> columns (New → Submitted to manager → Interview → Offer → Hired). Each step = applications reaching both that stage and the next ÷ applications reaching that stage.</td></tr>
+            <tr><td class="m">Positions Filled vs Open</td><td>Recruitment status of positions.</td><td>Position rows counted Filled/Hired vs Open (DELETED excluded), by the selected dimension (geography / unit / division / recruiter). Positions file merged on Job ID.</td></tr>
+            <tr><td class="m">Job Status</td><td>Requisition pipeline: jobs and their applications per status.</td><td>Stacked bar per status — Jobs counted by distinct Job ID (from the Jobs export when loaded, so Created &amp; no-applicant jobs are included) and Applications counted from application rows. Order: Created → Sourcing → Interview → Offer → Filled.</td></tr>
+            <tr><td class="m">Average Time in Stage</td><td>Mean days spent in each pipeline state, shown as a heat map.</td><td>Mean days in Lead, New, In-Review, Interview and Offered, broken down by Stäubli unit.</td></tr>
+            <tr><td class="m">Average Time in Job Status</td><td>Mean days a job spends in each job status, shown as a heat map (Cancelled excluded).</td><td>Mean of the “Time In Job Status” columns (Created, Sourcing, Interview, Offer, On Hold) by Stäubli unit.</td></tr>
+          </tbody>
+        </table>
+        <div class="defs-note">All metrics are “in period” — they respect the Job Creation Date range and every filter selected below.</div>
+      </div>
+    </details>
+
+    <div id="reportBody">
+    <div class="eyebrow">Key metrics</div>
+    <div class="kpis" id="kpis"></div>
+    <div class="flag hidden" id="dqFlag"></div>
+
+    <div class="eyebrow">Automated insights</div>
+    <div class="insights" id="insights"></div>
+
+    <div class="eyebrow">Pipeline &amp; flow</div>
+    <div class="grid">
+      <div class="panel span12"><h3>Applications over time</h3>
+        <div class="ph-sub">BY MONTH · APPLICATIONS + HIRES (STACKED)</div>
+        <div class="cwrap"><canvas id="cTime"></canvas></div></div>
+      <div class="panel span12"><h3>Job status</h3>
+        <div class="ph-sub">JOBS (BY JOB ID) + APPLICATIONS PER STATUS · CREATED HAS NO APPS BY DESIGN</div>
+        <div class="cwrap tall"><canvas id="cStatus"></canvas></div></div>
+
+      <div class="panel span12"><h3>Stage conversion</h3>
+        <div class="ph-sub">NEW → SUBMITTED TO MANAGER → INTERVIEW → OFFER → HIRE · BY STAGE DATE · STEP-BY-STEP CONVERSION</div>
+        <div class="chart-tools"><button class="ctbtn" id="convXlsx">⬇ Excel</button></div>
+        <div id="convStrip"></div></div>
+
+      <div class="panel span12"><h3>Average time in application stage — heat map</h3>
+        <div class="ph-sub">MEAN DAYS PER STATE, BY UNIT</div>
+        <div id="heat"></div></div>
+
+      <div class="panel span12"><h3>Average time in job status — heat map</h3>
+        <div class="ph-sub">MEAN DAYS · CREATED · SOURCING · INTERVIEW · OFFER · ON HOLD · BY UNIT · EXCL. CANCELLED</div>
+        <div id="heat2"></div></div>
+    </div>
+
+    <div class="eyebrow">Sourcing</div>
+    <div class="grid">
+      <div class="panel span6"><h3>Applications by source</h3>
+        <div class="ph-sub" id="srcSub">TOP 10 · BY SOURCE</div>
+        <div class="postoggle" id="srcToggle">
+          <button data-d="source" class="on">Source</button>
+          <button data-d="sourceSub">Sub source</button>
+          <button data-d="sourceType">Source type</button>
+        </div>
+        <div class="cwrap tall"><canvas id="cSource"></canvas></div></div>
+      <div class="panel span6"><h3>Source of hire</h3>
+        <div class="ph-sub" id="hireSrcSub">HIRES BY SOURCE TYPE</div>
+        <div class="postoggle" id="hireSrcToggle">
+          <button data-d="source">Source</button>
+          <button data-d="sourceSub">Sub source</button>
+          <button data-d="sourceType" class="on">Source type</button>
+        </div>
+        <div class="cwrap tall"><canvas id="cHireSrc"></canvas></div></div>
+    </div>
+
+    <div class="eyebrow">Geography, org &amp; positions</div>
+    <div class="grid">
+      <div class="panel span6" id="appBreakPanel"><h3>Applications by…</h3>
+        <div class="ph-sub" id="appBreakSub">TOP 12 · APPLICATIONS VS HIRES</div>
+        <div class="postoggle" id="appToggle">
+          <button data-d="country" class="on">Geography</button>
+          <button data-d="unit">Unit</button>
+          <button data-d="division">Division</button>
+          <button data-d="recruiter">Recruiter</button>
+        </div>
+        <div class="cwrap tall"><canvas id="cAppBreak"></canvas></div></div>
+
+      <div class="panel span6" id="posPanel"><h3>Positions — filled vs open</h3>
+        <div class="ph-sub" id="posSub">BY GEOGRAPHY · REQUIRES POSITIONS FILE</div>
+        <div class="postoggle" id="posToggle">
+          <button data-d="country" class="on">Geography</button>
+          <button data-d="unit">Unit</button>
+          <button data-d="division">Division</button>
+          <button data-d="recruiter">Recruiter</button>
+        </div>
+        <div class="cwrap tall"><canvas id="cPositions"></canvas></div></div>
+
+      <div class="panel span12"><h3>Offers not accepted</h3>
+        <div class="ph-sub" id="offNotSub">OFFERS EXTENDED BUT NOT HIRED · RESPECTS FILTERS</div>
+        <div class="chart-tools"><button class="ctbtn" id="offXlsx">⬇ Excel</button></div>
+        <div class="cs-notes" style="margin:0 0 12px;border:0;padding:0"><div class="cs-notes-h">Note</div><ul><li>For an offer-stage decline the reason is read from the <b>Withdrawal reason</b> field; declines with none recorded are flagged in red (and surfaced in the insights). The export still has no candidate name/ID, so add that column to list <b>who</b> declined by name.</li></ul></div>
+        <div class="tblscroll"><table class="tbl" id="offTable"></table></div></div>
+
+      <div class="panel span12"><h3>Recruiter capacity — live pipeline</h3>
+        <div class="ph-sub">PER RECRUITER · STACKED REQS + LIVE APPLICANTS BY JOB STATUS · AUTOMATICALLY SCOPED TO CREATED / SOURCING / INTERVIEW / OFFER / ON-HOLD REQUISITIONS (INDEPENDENT OF THE MAIN JOB-STATUS FILTER) · RESPECTS OTHER FILTERS</div>
+        <div class="rec-ctrl">Target live requisitions / recruiter
+          <input type="number" id="recTarget" value="10" min="1" step="1">
+          <span class="rec-legend">live reqs = Created / Sourcing / Interview / Offer / On-Hold (excl. Filled &amp; Cancelled) · drives the utilisation flag in the detail table</span></div>
+        <div class="cwrap tall"><canvas id="cRecruiter"></canvas></div></div>
+
+      <div class="panel span12"><h3>Recruiter capacity — detail</h3>
+        <div class="ph-sub" id="recSub">ONE ROW PER RECRUITER · ACTIVE REQS = UNIQUE JOB IDs IN CREATED / SOURCING / INTERVIEW / OFFER / ON-HOLD · CLICK A COLUMN HEADING TO SORT</div>
+        <div class="chart-tools"><button class="ctbtn" id="recXlsx">⬇ Excel</button></div>
+        <div class="tblscroll"><table class="tbl" id="recTable"></table></div></div>
+
+      <div class="panel span12"><h3>Days on hold by job title</h3>
+        <div class="ph-sub">JOBS THAT HAVE SPENT TIME IN ON-HOLD STATUS · LONGEST AT TOP · STACKED WITH LIVE APPLICANTS AFFECTED · RESPECTS FILTERS</div>
+        <div class="cwrap tall"><canvas id="cOnHold"></canvas></div></div>
+
+      <div class="panel span12"><h3>Job overview</h3>
+        <div class="ph-sub" id="jobTableSub">ONE ROW PER JOB · SORTED BY APPLICATION VOLUME · CLICK ANY BAR ABOVE TO FILTER</div>
+        <div class="chart-tools"><button class="ctbtn" id="jobXlsx">⬇ Excel</button></div>
+        <div class="drillchip" id="drillChip"></div>
+        <div class="tblscroll"><table class="tbl" id="jobTable"></table></div></div>
+    </div>
+    </div>
+  </section>
+</main>
+
+<div class="modal-ov" id="modalOv">
+  <div class="modal-card">
+    <div class="modal-head"><span id="modalTitle"></span>
+      <div class="modal-actions">
+        <button class="ctbtn" id="modalPng">↓ PNG</button>
+        <button class="ctbtn" id="modalClose">✕ Close</button>
+      </div>
+    </div>
+    <div class="modal-body"><div class="modal-canvas-wrap" id="modalCanvasWrap"><canvas id="modalCanvas"></canvas></div><div id="modalHtmlWrap" style="display:none"></div></div>
+  </div>
+</div>
+
+<footer>Stäubli · Recruitment Data and Analytics Dashboard · client-side analysis, nothing is uploaded · merge on Job ID · re-run any time by loading fresh exports.</footer>
+
+<script>
+  const DUMMY_APPLICATIONS = [
+    {
+      "Job ID": "JOB-1001",
+      "Job Ref ID": "REF-2201",
+      "Job Title": "Senior Frontend Engineer",
+      "Job Country/Region": "Switzerland",
+      "Recruiters": "Anna Keller, Marco Bianchi",
+      "Job Status": "INTERVIEW",
+      "Staubli unit": "Robotics",
+      "Default Job Ad Creation Date": "2026-01-06",
+      "Application State: New Date": "2026-01-10",
+      "Candidate Source": "LinkedIn",
+      "Candidate Source Type": "Job Board",
+      "Candidate Source Subtype": "LinkedIn Jobs",
+      "Application Status Before Rejection": "",
+      "Latest Offer extended date": "",
+      "Application Status: In-Review/Submitted to Manager Date": "2026-01-14",
+      "Application State: Interview Date": "2026-01-22",
+      "Application State: Offer Date": "",
+      "Application State: Hired Date": "",
+      "Division": "Engineering",
+      "Job family": "Software",
+      "Confidential": "No",
+      "Contract type": "Permanent",
+      "Origin": "FTE Budget",
+      "Application Reason For Rejection": "",
+      "Application Reason For Withdrawal": "",
+      "Time In Application State: Lead": "",
+      "Time In Application State: New": 4,
+      "Time In Application State: In-Review": 8,
+      "Time In Application State: Offered": "",
+      "Time In Application State: Interview": 6,
+      "Time in Application Status: Interview/Video Interview": 2,
+      "Time in Application Status: Interview/On-Site Interview": 1,
+      "Time in Application Status: Interview/On-Site Interview 2": "",
+      "Time in Application Status: Interview/Final Interview": "",
+      "Time in Job Status: CREATED": 2,
+      "Time in Job Status: SOURCING": 6,
+      "Time in Job Status: INTERVIEW": 9,
+      "Time in Job Status: OFFER": "",
+      "Time in Job Status: ON HOLD": ""
+    },
+    {
+      "Job ID": "JOB-1001",
+      "Job Ref ID": "REF-2201",
+      "Job Title": "Senior Frontend Engineer",
+      "Job Country/Region": "Switzerland",
+      "Recruiters": "Anna Keller",
+      "Job Status": "OFFER",
+      "Staubli unit": "Robotics",
+      "Default Job Ad Creation Date": "2026-01-06",
+      "Application State: New Date": "2026-01-08",
+      "Candidate Source": "Employee Referral",
+      "Candidate Source Type": "Referral",
+      "Candidate Source Subtype": "Internal Referral",
+      "Application Status Before Rejection": "",
+      "Latest Offer extended date": "2026-02-02",
+      "Application Status: In-Review/Submitted to Manager Date": "2026-01-11",
+      "Application State: Interview Date": "2026-01-18",
+      "Application State: Offer Date": "2026-02-02",
+      "Application State: Hired Date": "2026-02-14",
+      "Division": "Engineering",
+      "Job family": "Software",
+      "Confidential": "No",
+      "Contract type": "Permanent",
+      "Origin": "FTE Budget",
+      "Application Reason For Rejection": "",
+      "Application Reason For Withdrawal": "",
+      "Time In Application State: Lead": "",
+      "Time In Application State: New": 3,
+      "Time In Application State: In-Review": 7,
+      "Time In Application State: Offered": 12,
+      "Time In Application State: Interview": 5,
+      "Time in Application Status: Interview/Video Interview": 2,
+      "Time in Application Status: Interview/On-Site Interview": 2,
+      "Time in Application Status: Interview/On-Site Interview 2": 1,
+      "Time in Application Status: Interview/Final Interview": 1,
+      "Time in Job Status: CREATED": 2,
+      "Time in Job Status: SOURCING": 5,
+      "Time in Job Status: INTERVIEW": 7,
+      "Time in Job Status: OFFER": 12,
+      "Time in Job Status: ON HOLD": ""
+    },
+    {
+      "Job ID": "JOB-1002",
+      "Job Ref ID": "REF-2202",
+      "Job Title": "HR Business Partner",
+      "Job Country/Region": "France",
+      "Recruiters": "Sophie Laurent",
+      "Job Status": "SOURCING",
+      "Staubli unit": "Textile",
+      "Default Job Ad Creation Date": "2026-02-01",
+      "Application State: New Date": "2026-02-03",
+      "Candidate Source": "Indeed",
+      "Candidate Source Type": "Job Board",
+      "Candidate Source Subtype": "Indeed Organic",
+      "Application Status Before Rejection": "SOURCING_REJECTED",
+      "Latest Offer extended date": "",
+      "Application Status: In-Review/Submitted to Manager Date": "",
+      "Application State: Interview Date": "",
+      "Application State: Offer Date": "",
+      "Application State: Hired Date": "",
+      "Division": "People & Culture",
+      "Job family": "HR",
+      "Confidential": "No",
+      "Contract type": "Permanent",
+      "Origin": "(manually added)",
+      "Application Reason For Rejection": "Insufficient experience",
+      "Application Reason For Withdrawal": "",
+      "Time In Application State: Lead": "",
+      "Time In Application State: New": 5,
+      "Time In Application State: In-Review": "",
+      "Time In Application State: Offered": "",
+      "Time In Application State: Interview": "",
+      "Time in Application Status: Interview/Video Interview": "",
+      "Time in Application Status: Interview/On-Site Interview": "",
+      "Time in Application Status: Interview/On-Site Interview 2": "",
+      "Time in Application Status: Interview/Final Interview": "",
+      "Time in Job Status: CREATED": 3,
+      "Time in Job Status: SOURCING": 18,
+      "Time in Job Status: INTERVIEW": "",
+      "Time in Job Status: OFFER": "",
+      "Time in Job Status: ON HOLD": ""
+    },
+    {
+      "Job ID": "JOB-1003",
+      "Job Ref ID": "REF-2203",
+      "Job Title": "Field Service Technician",
+      "Job Country/Region": "Germany",
+      "Recruiters": "Marco Bianchi",
+      "Job Status": "ON_HOLD",
+      "Staubli unit": "Connectors",
+      "Default Job Ad Creation Date": "2025-12-10",
+      "Application State: New Date": "2025-12-15",
+      "Candidate Source": "Company Website",
+      "Candidate Source Type": "Direct",
+      "Candidate Source Subtype": "Careers Page",
+      "Application Status Before Rejection": "",
+      "Latest Offer extended date": "2026-01-20",
+      "Application Status: In-Review/Submitted to Manager Date": "2025-12-19",
+      "Application State: Interview Date": "2026-01-05",
+      "Application State: Offer Date": "2026-01-20",
+      "Application State: Hired Date": "",
+      "Division": "Operations",
+      "Job family": "Technical",
+      "Confidential": "No",
+      "Contract type": "Permanent",
+      "Origin": "FTE Budget",
+      "Application Reason For Rejection": "",
+      "Application Reason For Withdrawal": "Candidate accepted a competing offer",
+      "Time In Application State: Lead": "",
+      "Time In Application State: New": 4,
+      "Time In Application State: In-Review": 17,
+      "Time In Application State: Offered": 22,
+      "Time In Application State: Interview": 15,
+      "Time in Application Status: Interview/Video Interview": 3,
+      "Time in Application Status: Interview/On-Site Interview": 2,
+      "Time in Application Status: Interview/On-Site Interview 2": "",
+      "Time in Application Status: Interview/Final Interview": "",
+      "Time in Job Status: CREATED": 5,
+      "Time in Job Status: SOURCING": 20,
+      "Time in Job Status: INTERVIEW": 15,
+      "Time in Job Status: OFFER": 22,
+      "Time in Job Status: ON HOLD": 30
+    },
+    {
+      "Job ID": "JOB-1004",
+      "Job Ref ID": "REF-2204",
+      "Job Title": "Supply Chain Analyst",
+      "Job Country/Region": "United States",
+      "Recruiters": "Emily Chen",
+      "Job Status": "FILLED",
+      "Staubli unit": "Fluid Connectors",
+      "Default Job Ad Creation Date": "2025-11-03",
+      "Application State: New Date": "2025-11-06",
+      "Candidate Source": "LinkedIn",
+      "Candidate Source Type": "Job Board",
+      "Candidate Source Subtype": "LinkedIn Jobs",
+      "Application Status Before Rejection": "",
+      "Latest Offer extended date": "2025-12-01",
+      "Application Status: In-Review/Submitted to Manager Date": "2025-11-10",
+      "Application State: Interview Date": "2025-11-18",
+      "Application State: Offer Date": "2025-12-01",
+      "Application State: Hired Date": "2025-12-15",
+      "Division": "Supply Chain",
+      "Job family": "Operations",
+      "Confidential": "No",
+      "Contract type": "Permanent",
+      "Origin": "FTE Budget",
+      "Application Reason For Rejection": "",
+      "Application Reason For Withdrawal": "",
+      "Time In Application State: Lead": "",
+      "Time In Application State: New": 4,
+      "Time In Application State: In-Review": 8,
+      "Time In Application State: Offered": 14,
+      "Time In Application State: Interview": 13,
+      "Time in Application Status: Interview/Video Interview": 3,
+      "Time in Application Status: Interview/On-Site Interview": 3,
+      "Time in Application Status: Interview/On-Site Interview 2": 2,
+      "Time in Application Status: Interview/Final Interview": 1,
+      "Time in Job Status: CREATED": 3,
+      "Time in Job Status: SOURCING": 6,
+      "Time in Job Status: INTERVIEW": 13,
+      "Time in Job Status: OFFER": 14,
+      "Time in Job Status: ON HOLD": ""
+    }
+  ];
+
+  // --- SAMPLE: positions data ---
+  const DUMMY_POSITIONS = [
+    { "Job ID": "JOB-1001", "Position ID": "POS-5001", "Position Status": "OPEN" },
+    { "Job ID": "JOB-1001", "Position ID": "POS-5002", "Position Status": "OPEN" },
+    { "Job ID": "JOB-1003", "Position ID": "POS-5003", "Position Status": "OPEN" },
+    { "Job ID": "JOB-1004", "Position ID": "POS-5004", "Position Status": "FILLED" },
+    { "Job ID": "JOB-1004", "Position ID": "POS-5005", "Position Status": "HIRED" },
+    { "Job ID": "JOB-1005", "Position ID": "POS-5006", "Position Status": "DELETED" }
+  ];
+
+  // --- SAMPLE: jobs data ---
+  const DUMMY_JOBS = [
+    {
+      "Job ID": "JOB-1001", "Job Status": "OFFER", "Job Ref ID": "REF-2201",
+      "Job Title": "Senior Frontend Engineer", "Job Country/Region": "Switzerland",
+      "Staubli unit": "Robotics", "Division": "Engineering", "Job family": "Software",
+      "Contract type": "Permanent", "Recruiters": "Anna Keller, Marco Bianchi",
+      "Default Job Ad Creation Date": "2026-01-06"
+    },
+    {
+      "Job ID": "JOB-1002", "Job Status": "SOURCING", "Job Ref ID": "REF-2202",
+      "Job Title": "HR Business Partner", "Job Country/Region": "France",
+      "Staubli unit": "Textile", "Division": "People & Culture", "Job family": "HR",
+      "Contract type": "Permanent", "Recruiters": "Sophie Laurent",
+      "Default Job Ad Creation Date": "2026-02-01"
+    },
+    {
+      "Job ID": "JOB-1005", "Job Status": "CREATED", "Job Ref ID": "REF-2205",
+      "Job Title": "Data Analyst - People Analytics", "Job Country/Region": "Sweden",
+      "Staubli unit": "Robotics", "Division": "Engineering", "Job family": "Data",
+      "Contract type": "Permanent", "Recruiters": "Anna Keller",
+      "Default Job Ad Creation Date": "2026-03-01"
+    },
+    {
+      "Job ID": "JOB-1006", "Job Status": "CANCELLED", "Job Ref ID": "REF-2206",
+      "Job Title": "Warehouse Supervisor", "Job Country/Region": "Poland",
+      "Staubli unit": "Fluid Connectors", "Division": "Supply Chain", "Job family": "Operations",
+      "Contract type": "Fixed-term", "Recruiters": "Emily Chen",
+      "Default Job Ad Creation Date": "2025-10-15"
+    }
+  ];
 /* silence noisy (harmless) SheetJS zip-size warnings from some SmartRecruiters exports */
-(async function(){
-    var loader = document.getElementById('pageLoader');
-    if (!loader) return;
-
-    const token = await initAuth();
-    if (!token) {
-        window.location.href = `../login.html`;
-        return;
-    }
-
-    const user = await getCurrentUser();
-    if (user.error){
-        logout();
-        window.location.href = `../login.html`;
-        return;
-    }
-
-    if (!user.data || user.data.role == 'admin'){
-        logout();
-        window.location.href = `../login.html`;
-        return;
-    }
-
-    await MFA.requireAuth();
-    
-    const loaded = await loadAllData(token);
-    if (!loaded) return;
-    
-    updateLastLogin(user.data.id);
-
-    loader.classList.add('hide');
-   
-    const w=console.warn.bind(console),e=console.error.bind(console),l=console.log.bind(console);
-  const skip=a=>typeof a==='string'&&/bad uncompressed size/i.test(a);
-  console.warn=(...a)=>{if(!skip(a[0]))w(...a);};
-  console.error=(...a)=>{if(!skip(a[0]))e(...a);};
-  console.log=(...a)=>{if(!skip(a[0]))l(...a);};})();
 Chart.register(ChartDataLabels);
 Chart.defaults.plugins.datalabels.display=false; // opt-in per chart
 
@@ -95,6 +824,18 @@ const JOBREFS=new Set();            // selected Job Refs for one-or-more-job rec
 const CSS=k=>getComputedStyle(document.documentElement).getPropertyValue(k).trim();
 const parseDMY=s=>{if(!s)return null;const d=new Date(s+'T00:00:00');return isNaN(d)?null:d;};
 const isoDay=d=>d?d.toISOString().slice(0,10):'';
+
+function loadDummyData(){
+    APP = DUMMY_APPLICATIONS.map(mapAppRow);
+    POS = DUMMY_POSITIONS.map(mapPosRow);
+    JOBS = DUMMY_JOBS.map(mapJobRow);
+
+    markLoaded('app', APP.length);
+    markLoaded('pos', POS.length);
+    markLoaded('jobs', JOBS.length);
+    showJoin();
+    maybeRender();
+}
 
 function showLoaderError(message) {
     const loader = document.getElementById('pageLoader');
@@ -1232,13 +1973,20 @@ async function fetchReport(kind, token){
     return Array.isArray(data) ? data : (data?.content ?? data?.data ?? data?.rows ?? []);
 }
 
-async function loadAllData(){
-    const plText = document.querySelector('#pageLoader .pl-text');
-    if (plText) plText.textContent = 'Loading dashboard data…';
+async function loadAllData(token){
+    const err = document.getElementById('err');
+    err.classList.remove('show');
 
-    try {
-        const { appRows, posRows, jobRows } = await MFA.loadDashboardData();
-        if (!appRows || !appRows.length) throw new Error('No application records returned.');
+    const plText = document.querySelector('#pageLoader .pl-text');
+    if (plText) plText.textContent = 'Fetching reports from SmartRecruiters…';
+
+    try{
+        const [appRows, posRows, jobRows] = await Promise.all([
+            fetchReport('applications', token),
+            fetchReport('positions', token),
+            fetchReport('jobs', token)
+        ]);
+        if (!appRows.length) throw new Error('No application records returned.');
 
         APP = appRows.map(mapAppRow);
         POS = posRows.map(mapPosRow);
@@ -1249,10 +1997,9 @@ async function loadAllData(){
         markLoaded('jobs', JOBS.length);
         showJoin();
         maybeRender();
-        return true;
-    } catch (ex) {
-        showLoaderError(ex.message || 'Could not load dashboard data.');
-        return false;
+    }catch(ex){
+        err.textContent = ex.message || 'Could not load data.';
+        err.classList.add('show');
     }
 }
 
@@ -1269,32 +2016,6 @@ function markLoaded(kind, count){
         slot.style.cursor = 'default'; // no longer clickable to upload
     }
     if (fileEl) fileEl.textContent = `✓ ${count.toLocaleString()} rows loaded`;
-}
-
-async function updateLastLogin(userId){
-    const res = await fetch('/api/supabase?action=updateOrganisationUser', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: userId, payload: {last_active: getFormattedTimestamp()} })
-    });
-}
-
-function getFormattedTimestamp() {
-    const now = new Date();
-    
-    const pad = (num, len = 2) => String(num).padStart(len, '0');
-    
-    const year = now.getUTCFullYear();
-    const month = pad(now.getUTCMonth() + 1);
-    const day = pad(now.getUTCDate());
-    const hours = pad(now.getUTCHours());
-    const minutes = pad(now.getUTCMinutes());
-    const seconds = pad(now.getUTCSeconds());
-    
-    const microseconds = pad(now.getUTCMilliseconds(), 3) + '000';
-    const micro5 = microseconds.slice(0, 5);
-    
-    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${micro5}+00`;
 }
 
 /* ---------- file wiring ---------- */
@@ -1317,13 +2038,6 @@ function loadFile(kind,file){
 }
 document.body.addEventListener('dragover', e => e.preventDefault());
 document.body.addEventListener('drop', e => e.preventDefault());
-
-// Reload button now just re-fetches from the API instead of scrolling to an upload zone.
-// document.getElementById('reloadAll').onclick = async () => {
-//   const token = await initAuth();
-//   if (!token) { window.location.href = './login.html'; return; }
-//   await loadAllData(token);
-// };
 
 /* positions dimension toggle */
 document.querySelectorAll('#posToggle button').forEach(b=>b.onclick=()=>{POSDIM=b.dataset.d;renderPositions();});
@@ -1388,8 +2102,6 @@ document.getElementById('logoutBtn').addEventListener('click', async function ()
     btn.disabled = true;
     btn.textContent = '⏻ Logging out…';
 
-    const type = btn.dataset.type;
-
     try {
       await logout();
     } catch (err) {
@@ -1397,5 +2109,100 @@ document.getElementById('logoutBtn').addEventListener('click', async function ()
       // fall through to redirect regardless — don't trap the user on a broken session
     }
 
-    window.location.href = (type == 'dashboard') ? '../login.html' : './login.html';
+    window.location.href = './login.html';
   });
+
+/* ============ DATA SOURCE SWITCH ============ */
+let DATA_MODE = localStorage.getItem('dashDataMode') || 'dummy'; // 'dummy' | 'live'
+let AUTH_TOKEN = null;
+
+// allow ?data=live or ?data=dummy to override the saved preference for this load
+(function(){
+  const p = new URLSearchParams(location.search).get('data');
+  if (p === 'live' || p === 'dummy') DATA_MODE = p;
+})();
+
+function clearData(){
+  APP = []; POS = []; JOBS = []; JOBATTR = {}; LASTROWS = []; DRILL = null;
+  document.getElementById('dash')?.classList.add('hidden');
+}
+
+function setDataMode(mode){
+  DATA_MODE = mode;
+  localStorage.setItem('dashDataMode', mode);
+  updateSourceToggleUI();
+}
+
+function loadDummy(){
+  clearData();
+  loadDummyData();           // existing function — fills APP/POS/JOBS from DUMMY_* arrays
+}
+
+async function loadLive(){
+  clearData();
+  const loader = document.getElementById('pageLoader');
+  loader?.classList.remove('hide');
+  const plText = loader?.querySelector('.pl-text');
+  if (plText) plText.textContent = 'Fetching reports from SmartRecruiters…';
+
+  const token = AUTH_TOKEN || (typeof initAuth === 'function' ? await initAuth() : null);
+  if (!token){
+    showLoaderError('Not signed in — please log in to load live data.');
+    setDataMode('dummy');    // fall back so the toggle stays consistent
+    return;
+  }
+  AUTH_TOKEN = token;
+  await loadAllData(token);  // existing function — hits /api/reports
+}
+
+async function switchDataSource(mode){
+  setDataMode(mode);
+  if (mode === 'live') await loadLive();
+  else loadDummy();
+}
+
+function updateSourceToggleUI(){
+  document.getElementById('srcDummyBtn')?.classList.toggle('on', DATA_MODE === 'dummy');
+  document.getElementById('srcLiveBtn')?.classList.toggle('on', DATA_MODE === 'live');
+}
+
+function injectSourceToggle(){
+  if (document.getElementById('dataSrcToggle')) return;
+  const header = document.querySelector('header');
+  if (!header) return;
+  const wrap = document.createElement('div');
+  wrap.id = 'dataSrcToggle';
+  wrap.style.cssText = 'display:flex;gap:6px;align-items:center;margin-left:12px';
+  // wrap.innerHTML = `
+  //   <button id="srcDummyBtn" class="ctbtn" title="Use sample data">Sample data</button>
+  //   <button id="srcLiveBtn" class="ctbtn" title="Use live SmartRecruiters data">Live data</button>
+  //   <button id="reloadAll" class="ctbtn" title="Reload the current data source">↻ Reload</button>`;
+  // header.appendChild(wrap);
+  // document.getElementById('srcDummyBtn').onclick = () => switchDataSource('dummy');
+  // document.getElementById('srcLiveBtn').onclick  = () => switchDataSource('live');
+  // document.getElementById('reloadAll').onclick   = () => switchDataSource(DATA_MODE);
+  updateSourceToggleUI();
+}
+
+/* ---------- boot (runs after all state vars & functions are declared) ---------- */
+(async function(){
+  const loader = document.getElementById('pageLoader');
+
+  const w=console.warn.bind(console),e=console.error.bind(console),l=console.log.bind(console);
+  const skip=a=>typeof a==='string'&&/bad uncompressed size/i.test(a);
+  console.warn=(...a)=>{if(!skip(a[0]))w(...a);};
+  console.error=(...a)=>{if(!skip(a[0]))e(...a);};
+  console.log=(...a)=>{if(!skip(a[0]))l(...a);};
+
+  injectSourceToggle();
+
+  if (DATA_MODE === 'live') {
+    await loadLive();
+  } else {
+    loadDummy();
+    loader?.classList.add('hide');
+  }
+})();
+</script>
+</body>
+</html>

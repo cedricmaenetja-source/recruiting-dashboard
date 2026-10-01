@@ -8,6 +8,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" type="text/css" href="../assets/css/common.css" />
 <script src="https://code.jquery.com/jquery-3.3.1.js"></script>
+<script src="/assets/js/core/mfa.js"></script>
+<link rel="shortcut icon" href="https://udder.rocks/hubfs/Udder_October2022/images/favicon-32x32.png">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
@@ -16,7 +18,7 @@
     --signal:#e2000f;
     --steel:#5b5d63; --steel2:#8d8f95; --steel3:#54565b; --steel4:#b4b6bb;
     --amber:#b8860b; --good:#2e9e5b; --warn:#a01018;
-    --sans:'Helvetica Neue',Arial,'Inter',system-ui,-apple-system,sans-serif;
+    --sans:'Inter',system-ui,-apple-system,sans-serif;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
@@ -156,7 +158,7 @@
         </div>
       </div>
 
-      <div class="source-list">
+      <!-- <div class="source-list">
         <div class="sl-label">Applications by source</div>
         <div class="sl-row lead">
           <div class="sl-name">Referral</div>
@@ -173,7 +175,7 @@
           <div class="sl-track"><div class="sl-bar" style="width:41%"></div></div>
           <div class="sl-pct">17%</div>
         </div>
-      </div>
+      </div> -->
     </div>
 
     <!-- right: sign-in form -->
@@ -242,7 +244,12 @@
             return;
           }
 
-          window.location.href = `./${data.dashboard_path}`;
+          if (data.dashboard_url){
+            await continueTo(`/api/dashboard?org=${data.organisation_id}`);
+            return;
+          }
+
+          await continueTo(`/${data.dashboard_path}`);
           return;
         }
       } catch (err) {
@@ -274,6 +281,7 @@
           if (!result || result.error) {
             errEl.textContent = (result && result.error) || 'Incorrect email or password. Try again, or reset your password below.';
             errEl.classList.add('show');
+            reset();
             return;
           }
 
@@ -282,15 +290,27 @@
             return;
           }
 
-          window.location.href = `./${result.dashboard_path}`;
+          if (result.dashboard_url){
+            await continueTo(`/api/dashboard?org=${result.organisation_id}`);
+            return;
+          }
+
+          await continueTo(`/${result.dashboard_path}`);
         } catch (err) {
           console.error('Login error:', err);
           errEl.textContent = 'Something went wrong signing you in. Please try again.';
           errEl.classList.add('show');
+          reset();
         } finally {
-          if (typeof reset === 'function') reset();
+          //if (typeof reset === 'function') reset();
         }
       });
+
+      async function continueTo(target) {
+        const token = await initAuth();
+        MFA.setToken(token);
+        await MFA.afterLogin(target);
+      }
     })().catch(err => console.error('Login page init failed:', err));
 </script>
 </body>

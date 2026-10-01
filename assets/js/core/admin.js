@@ -9,7 +9,7 @@ $(async function(){
     }
 
     const user = await getCurrentUser();
-    if (user.data.role != 'admin'){
+    if (!user.data || user.data.role != 'admin'){
         logout();
         window.location.href = `./login.html`;
         return;
@@ -439,7 +439,7 @@ $(async function(){
                 const res = await fetch('/api/send-email?action=resetPasswordLink', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token: token, link: `${window.location.origin}/reset-password.html`})
+                    body: JSON.stringify({ token: token, email: u.email, link: `${window.location.origin}/reset-password.html`})
                 });
 
                 const r = await res.json();

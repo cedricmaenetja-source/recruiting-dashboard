@@ -8,6 +8,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="shortcut icon" href="https://udder.rocks/hubfs/Udder_October2022/images/favicon-32x32.png">
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
 <style>
@@ -322,7 +324,7 @@
     </div>
     <div class="spacer"></div>
     <!-- <button class="btn" id="reloadAll">↻ Load / swap files</button> -->
-    <button class="btn" id="logoutBtn">⏻ Logout</button>
+    <button class="btn" id="logoutBtn" data-type="dashboard">⏻ Logout</button>
   </div>
 </header>
 
@@ -515,8 +517,8 @@
 </div>
 
 <footer>Stäubli · Recruitment Data and Analytics Dashboard · V1</footer>
-
-<script type="module" src="assets/js/core/main.js">
-</script>
+<!-- <script id="embedded-data" type="application/json">__EMBEDDED_DATA__</script> -->
+ <script src="../assets/js/core/mfa.js"></script>
+<script type="module" src="../assets/js/core/main.js"></script>
 </body>
 </html>

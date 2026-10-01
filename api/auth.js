@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import { createClient } from '@supabase/supabase-js';
+import dashboard from './dashboard';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -72,6 +73,7 @@ export default async function handler(req, res) {
         accessToken,
         user: safeUser,
         dashboard_path: org.dashboard_path,
-        organisation_id: org.id
+        organisation_id: org.id,
+        dashboard_url: org.dashboard_url
     });
 }

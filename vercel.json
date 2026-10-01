@@ -1,0 +1,15 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "functions": {
+    "api/cron.js": {
+      "includeFiles": "templates/**"
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/cron?org=67ce047c-99d4-40c1-a0a4-691ce4046852",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}

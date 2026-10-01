@@ -27,7 +27,10 @@ export default async function handler(req, res) {
     }
 
     // Clear the cookie regardless
-    res.setHeader('Set-Cookie', 'refreshToken=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0');
+    res.setHeader('Set-Cookie', [
+        'refreshToken=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0',
+        'dash_mfa=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0',
+    ]);
 
     return res.status(200).json({ loggedOut: true });
 }

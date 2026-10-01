@@ -67,9 +67,9 @@ export default async function handler(req, res) {
 
     if (action === 'resetPasswordLink'){
         payload = {
-            to: exists.email,
+            to: email,
             subject: '[Recruiting Dashboard] - Password Reset',
-            body: RESET_PASSWORD_EMAIL.replace('{{LINK}}', link) 
+            body: RESET_PASSWORD_EMAIL.replace('{{LINK}}', link).replaceAll('{{EMAIL}}', email) 
         };
     }
 
@@ -111,8 +111,9 @@ export const RESET_PASSWORD_EMAIL = `
 
     To reset your password, click the link below:<br/><br/>
 
-    <strong>{{LINK}}</strong><br/><br/>
+    <strong>{{LINK}}?email={{EMAIL}}</strong><br/><br/>
 
+    Email to use: <strong>{{EMAIL}}</strong><br/><br/>
     If you did not request this, please ignore this email.<br/><br/>
 
     Thanks,<br/>
